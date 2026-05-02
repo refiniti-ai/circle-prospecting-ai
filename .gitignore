@@ -1,0 +1,17 @@
+node_modules
+dist
+.firebase
+report.zip
+temp-ref-*.jpg
+.design-ref
+.DS_Store
+*.local
+.env
+.env.local
+.env.*.local
+server/data/inventory.json
+server/data/orders.json
+server/data/purchase-confirmations.json
+# Firebase Admin private keys — never commit
+secrets/
+*firebase-adminsdk*.json

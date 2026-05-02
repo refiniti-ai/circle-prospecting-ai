@@ -1,0 +1,4 @@
+mls,address,city,state,zip,listPrice,type,phone,email
+DEMO-1001,123 Palm Ave,Tampa,FL,33602,$425000,Single-family,555-0100,owner@example.com
+DEMO-1002,88 Bay Dr,Clearwater,FL,33755,$512500,Condo,555-0101,
+DEMO-1003,44 Oak Ln,St Petersburg,FL,33701,$389000,Townhouse,555-0102,lead2@example.com

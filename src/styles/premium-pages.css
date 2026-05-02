@@ -1,0 +1,324 @@
+/* Shared page shell aligned with homepage Rezora UI. */
+.app-shell,
+.home-premium-wrap {
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse 80% 45% at 12% -5%, rgba(0, 122, 255, 0.08), transparent 52%),
+    radial-gradient(ellipse 65% 35% at 88% -8%, rgba(162, 215, 41, 0.08), transparent 48%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 42%, #ffffff 100%);
+}
+
+.page-space {
+  padding: clamp(1.5rem, 3vw, 2.25rem) 0 clamp(2.5rem, 5vw, 3.5rem);
+}
+
+.page-space--tight {
+  padding-top: 1.25rem;
+}
+
+.page-hero {
+  margin-bottom: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.page-breadcrumb {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.page-breadcrumb a {
+  color: var(--accent-cyan);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.page-breadcrumb a:hover {
+  color: #7ee7ff;
+}
+
+.page-h1 {
+  font-size: clamp(1.75rem, 3.5vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0.4rem 0 0.65rem;
+  color: var(--text);
+}
+
+.page-h1--gradient {
+  background: linear-gradient(90deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.page-lead {
+  color: var(--muted);
+  line-height: 1.72;
+  max-width: 640px;
+  margin: 0 0 0.5rem;
+  font-size: 1.02rem;
+}
+
+.page-narrow {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.page-center-card {
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: clamp(1.75rem, 4vw, 2.5rem);
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid rgba(5, 12, 26, 0.08);
+  box-shadow: 0 20px 46px rgba(5, 12, 26, 0.1);
+  text-align: center;
+}
+
+.page-center-card .page-h1,
+.page-center-card p {
+  text-align: center;
+}
+
+.page-center-card p {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.page-prose {
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.page-prose h2 {
+  color: var(--text);
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 1.75rem 0 0.65rem;
+  letter-spacing: -0.02em;
+}
+
+.page-prose a {
+  color: var(--accent-cyan);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.page-prose a:hover {
+  color: #9eedff;
+}
+
+/* Alerts */
+.cp-alert {
+  border-radius: 14px;
+  padding: 0.9rem 1.1rem;
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  border: 1px solid transparent;
+}
+
+.cp-alert a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.cp-alert--info,
+.cp-alert-info {
+  background: rgba(0, 122, 255, 0.08);
+  border-color: rgba(0, 122, 255, 0.2);
+  color: #0b4a82;
+}
+
+.cp-alert--warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #8a5800;
+}
+
+.cp-alert--error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.26);
+  color: #8d1f1f;
+}
+
+.cp-alert--success {
+  background: rgba(162, 215, 41, 0.14);
+  border-color: rgba(143, 184, 32, 0.32);
+  color: #325500;
+}
+
+.cp-alert code,
+.cp-kbd {
+  font-size: 0.85em;
+  color: #2f4f00;
+  background: rgba(162, 215, 41, 0.16);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+
+/* Form polish */
+.cp-form-grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.cp-form-grid input[type="radio"],
+.cp-form-grid input[type="checkbox"] {
+  accent-color: var(--accent-cyan);
+  margin-right: 0.4rem;
+}
+
+.cp-form-grid label {
+  color: var(--muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+input[type="file"] {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 100%;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 0.9rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 0.5rem 0.9rem;
+  border-radius: 10px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: rgba(0, 122, 255, 0.05);
+  border-color: rgba(0, 122, 255, 0.3);
+}
+
+/* Map & embeds */
+.cp-map-frame,
+.cp-map-frame iframe {
+  border-radius: 14px;
+  border: 1px solid rgba(5, 12, 26, 0.09) !important;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* Stat strip (admin) */
+.cp-stat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.cp-stat-pill {
+  padding: 0.55rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.18);
+  font-size: 0.88rem;
+  color: #114f87;
+}
+
+/* Table in glass */
+.cp-table-wrap {
+  border-radius: 16px;
+  border: 1px solid rgba(5, 12, 26, 0.08);
+  background: #fff;
+  overflow: auto;
+  margin-top: 1rem;
+  box-shadow: 0 12px 34px rgba(5, 12, 26, 0.08);
+}
+
+.cp-table-wrap .data-table {
+  min-width: 100%;
+  margin: 0;
+}
+
+.cp-table-wrap th {
+  color: #4f6885 !important;
+  background: rgba(5, 12, 26, 0.03);
+  font-size: 0.78rem;
+}
+
+/* Loading / empty */
+.cp-loading-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.cp-loading-line::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.6);
+  animation: cp-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cp-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-space {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+  }
+
+  .page-breadcrumb {
+    font-size: 0.84rem;
+  }
+
+  .page-h1 {
+    font-size: clamp(1.5rem, 7.2vw, 2rem);
+    line-height: 1.14;
+  }
+
+  .page-lead {
+    font-size: 0.95rem;
+    line-height: 1.62;
+  }
+
+  .page-center-card {
+    padding: 1.25rem 1rem;
+  }
+
+  .cp-alert {
+    padding: 0.75rem 0.9rem;
+    font-size: 0.88rem;
+  }
+
+  .cp-stat-pill {
+    width: 100%;
+  }
+
+  .cp-form-grid label {
+    line-height: 1.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-loading-line::before {
+    animation: none;
+  }
+}
