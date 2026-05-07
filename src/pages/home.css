@@ -564,6 +564,9 @@
 .flow-card:nth-child(4) {
   animation-delay: 0.24s;
 }
+.flow-card:nth-child(5) {
+  animation-delay: 0.3s;
+}
 
 .cp-section-muted {
   background: rgba(0, 0, 0, 0.2);
@@ -627,7 +630,7 @@
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 500px;
+  min-width: min(100%, 500px);
   font-size: 0.95rem;
 }
 

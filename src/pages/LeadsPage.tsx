@@ -4,11 +4,11 @@ import { LeadsProductSection, SocialProofSection } from "../components/marketing
 export function LeadsPage() {
   return (
     <MarketingPageShell
-      title="Leads | Circle Prospecting AI"
-      description="Inventory-grade real estate leads sold in packs. CSV delivery, Stripe checkout, and a secure client dashboard."
+      title="Product | Circle Prospecting AI"
+      description="We contact homeowners for you—data, AI dialing, and live callers. Conversations and appointments back to your team, with per-home pricing and a secure dashboard."
       path="/leads"
-      heroTitle="Leads"
-      heroLead="Structured lead inventory for serious operators: upload once, sell in packs, deliver by email with JWT-secured access and one-click CSV export."
+      heroTitle="What we deliver"
+      heroLead="A done-for-you prospecting engine: lists + AI outreach + optional live appointment setters. We own the dialer; you own the deals. Checkout locks scope; your dashboard shows delivery."
     >
       <LeadsProductSection />
       <SocialProofSection />

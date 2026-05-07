@@ -18,25 +18,46 @@ import {
   serviceLineLabel,
   tierRowMeta,
   minLeadsForStripeForTier,
-  publicPricingSnapshot,
   type LeadServiceLine,
   type LeadTierId,
 } from "../src/lib/leadPricing.ts";
 import { getSummary, upsertLeadsFromRows, getLeadsForEmail, estimateLeadCount } from "./leadStore.js";
 import { signDashboardToken, verifyDashboardToken } from "./dashboardAuth.js";
 import { fulfillLeadPackFromSession } from "./leadFulfillment.js";
+import { emailMatchesSession, normalizePhoneDigits, phonesMatch } from "./checkoutIdentity.js";
 import { createStripeWebhookHandler } from "./stripeWebhook.js";
 import { processInboundNewListing } from "./newListingWorkflow.js";
-import { listPurchaseNotifications, orderNumberFromSessionId } from "./purchaseConfirmStore.js";
+import {
+  listPurchaseNotifications,
+  listPurchasesForEmail,
+  markPurchaseNotification,
+  orderNumberFromSessionId,
+} from "./purchaseConfirmStore.js";
+import { getFirestoreDb } from "./firebaseAdmin.js";
 
-const PORT = Number.parseInt(process.env.API_PORT || "8787", 10);
+/** Cloud Run sets PORT (usually 8080); local dev uses API_PORT or 8787. */
+const PORT = Number.parseInt(process.env.PORT || process.env.API_PORT || "8787", 10);
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
-const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+function buildAllowedOrigins(): string[] {
+  const fromEnv = (process.env.CORS_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const appPublic = process.env.APP_PUBLIC_URL?.trim().replace(/\/$/, "");
+  if (appPublic?.startsWith("http")) {
+    try {
+      const origin = new URL(appPublic).origin;
+      if (!fromEnv.includes(origin)) fromEnv.push(origin);
+    } catch {
+      /* ignore bad URL */
+    }
+  }
+  return fromEnv;
+}
+
+const allowedOrigins = buildAllowedOrigins();
 
 app.set("trust proxy", 1);
 app.use(
@@ -116,7 +137,6 @@ async function handleInboundNewListing(req: Request, res: Response) {
 }
 
 app.post("/api/new-listing", webhookLimit, rawJson, handleInboundNewListing);
-app.post("/api/inbound/new-listing", webhookLimit, rawJson, handleInboundNewListing);
 
 app.post(
   "/api/webhooks/stripe",
@@ -128,7 +148,13 @@ app.post(
 app.use(express.json({ limit: "48kb" }));
 
 app.get("/api/health", generalLimit, (_req: Request, res: Response) => {
-  res.json({ status: "ok", time: new Date().toISOString() });
+  let firestore = false;
+  try {
+    firestore = Boolean(getFirestoreDb());
+  } catch {
+    firestore = false;
+  }
+  res.json({ status: "ok", time: new Date().toISOString(), firestore });
 });
 
 const sessionIdQuery = z.object({ session_id: z.string().min(10).max(128) });
@@ -196,10 +222,6 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-app.get("/api/public/lead-packs", generalLimit, (_req: Request, res: Response) => {
-  res.json(publicPricingSnapshot());
-});
-
 const leadCountBody = z.object({
   city: z.string().optional(),
   county: z.string().optional(),
@@ -225,8 +247,8 @@ app.get("/api/admin/summary", generalLimit, requireAdmin, (_req: Request, res: R
   res.json({ inventory: getSummary() });
 });
 
-app.get("/api/admin/purchases", generalLimit, requireAdmin, (_req: Request, res: Response) => {
-  res.json({ purchases: listPurchaseNotifications() });
+app.get("/api/admin/purchases", generalLimit, requireAdmin, async (_req: Request, res: Response) => {
+  res.json({ purchases: await listPurchaseNotifications() });
 });
 
 app.post("/api/admin/leads/csv", generalLimit, requireAdmin, upload.single("file"), (req: Request, res: Response) => {
@@ -252,11 +274,14 @@ const leadCheckout = z.object({
   serviceLine: z.enum(["ai_outreach", "live_callers", "hybrid", "data_only"]),
   leadTier: z.enum(["dabble", "starter", "growth", "scale"]),
   email: z.string().email(),
+  /** Collected before checkout; must match when signing in after payment. */
+  phone: z.string().min(10, "Enter a valid phone number"),
   requestedLeads: z.coerce.number().int().min(1).max(50_000),
   city: z.string().trim().max(80).optional(),
   county: z.string().trim().max(80).optional(),
   zip: z.string().trim().max(20).optional(),
   radiusMiles: z.coerce.number().positive().max(50).optional(),
+  campaignType: z.enum(["just_listed", "just_sold"]).optional(),
 });
 
 app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Response) => {
@@ -265,7 +290,12 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
     res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
     return;
   }
-  const { serviceLine, leadTier, email, city, county, zip, radiusMiles, requestedLeads } = parsed.data;
+  const { serviceLine, leadTier, email, phone, city, county, zip, radiusMiles, requestedLeads, campaignType } = parsed.data;
+  const phoneDigits = normalizePhoneDigits(phone);
+  if (phoneDigits.length < 10) {
+    res.status(400).json({ error: "invalid_phone", message: "Phone must include at least 10 digits." });
+    return;
+  }
   const sl = serviceLine as LeadServiceLine;
   const tier = leadTier as LeadTierId;
   if (!leadCountFitsTier(requestedLeads, tier)) {
@@ -302,7 +332,9 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
   const radiusLabel = radiusMiles ? `${radiusMiles} mi` : "";
   const targetingLabel = [locationLabel, radiusLabel].filter(Boolean).join(" • ");
   const tierLabel = tierRowMeta(tier).packageLabel;
-  const productTitle = `${serviceLineLabel(sl)} — ${requestedLeads.toLocaleString()} homeowners (${tierLabel} plan)`;
+  const campaignLabel =
+    campaignType === "just_sold" ? "Just sold" : campaignType === "just_listed" ? "Just listed" : "";
+  const productTitle = `${campaignLabel ? `${campaignLabel} · ` : ""}${serviceLineLabel(sl)} — ${requestedLeads.toLocaleString()} homeowners (${tierLabel})`;
   const session = await stripe.checkout.sessions.create(
     {
       mode: "payment",
@@ -315,14 +347,18 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
             unit_amount: unitAmountCents,
             product_data: {
               name: productTitle,
-              description: targetingLabel
-                ? `Targeting: ${targetingLabel}. Delivery in dashboard after payment.`
-                : "Qualified leads — delivery in your dashboard after payment (test mode ready).",
+              description: [
+                campaignLabel && `Campaign: ${campaignLabel} neighborhood promotion`,
+                targetingLabel && `Area: ${targetingLabel}`,
+                "Delivery and files in your dashboard after payment.",
+              ]
+                .filter(Boolean)
+                .join(" "),
             },
           },
         },
       ],
-      success_url: `${base}/order/success?session_id={CHECKOUT_SESSION_ID}&next=dashboard&claim=1`,
+      success_url: `${base}/order/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${base}/buy-leads?canceled=1`,
       client_reference_id: `leads-${idem}`,
       metadata: {
@@ -331,11 +367,13 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
         serviceLine,
         leadTier: leadTier,
         customerEmail: email,
+        customerPhone: phoneDigits,
         city: city || "",
         county: county || "",
         zip: zip || "",
         radiusMiles: radiusMiles ? String(radiusMiles) : "",
         requestedLeads: String(requestedLeads),
+        campaignType: campaignType ?? "",
       },
     },
     { idempotencyKey: `lead-${requestedLeads}-${serviceLine}-${leadTier}-${email}-${idem}`.slice(0, 90) }
@@ -347,12 +385,16 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
   res.json({ url: session.url, sessionId: session.id, unitAmountCents });
 });
 
-const claimBody = z.object({ sessionId: z.string().min(10) });
+const claimBody = z.object({
+  sessionId: z.string().min(10),
+  email: z.string().email(),
+  phone: z.string().min(7),
+});
 
 app.post("/api/auth/claim-leads", generalLimit, async (req: Request, res: Response) => {
   const parsed = claimBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "invalid body" });
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
     return;
   }
   const sk = process.env.STRIPE_SECRET_KEY;
@@ -370,14 +412,47 @@ app.post("/api/auth/claim-leads", generalLimit, async (req: Request, res: Respon
     res.status(400).json({ error: "not a lead pack session" });
     return;
   }
-  fulfillLeadPackFromSession(s);
-  const email = s.customer_details?.email || s.customer_email || s.metadata?.customerEmail;
-  if (!email) {
-    res.status(400).json({ error: "no email on session" });
+  if (!emailMatchesSession(s, parsed.data.email)) {
+    res.status(400).json({
+      error: "identity_mismatch",
+      message: "Email does not match this order. Use the same email you entered before checkout.",
+    });
     return;
   }
-  const token = await signDashboardToken(email);
-  res.json({ token, email });
+  const metaPhone = s.metadata?.customerPhone?.trim() ?? "";
+  if (normalizePhoneDigits(metaPhone).length >= 10) {
+    if (!phonesMatch(metaPhone, parsed.data.phone)) {
+      res.status(400).json({
+        error: "identity_mismatch",
+        message: "Phone number does not match this order. Use the same phone you entered before checkout.",
+      });
+      return;
+    }
+  }
+  const emailCanon = parsed.data.email.trim().toLowerCase();
+  // Always attach the verified claim email to this session so /api/my/purchases matches the JWT
+  // (webhook may have stored null email or a different Stripe-normalized value).
+  const orderNumber = orderNumberFromSessionId(s.id);
+  const rlRaw = s.metadata?.requestedLeads || s.metadata?.packSize;
+  const rlNum = rlRaw ? Number.parseInt(String(rlRaw), 10) : NaN;
+  const campaign = s.metadata?.campaignType ? String(s.metadata.campaignType) : "";
+  await markPurchaseNotification(s.id, {
+    orderNumber,
+    notifiedAt: new Date().toISOString(),
+    checkoutType: "lead_pack",
+    customerEmail: emailCanon,
+    amountTotalCents: s.amount_total,
+    currency: s.currency || null,
+    lineItems: [campaign ? `Neighborhood promotion (${campaign})` : "Neighborhood lead pack"],
+    leadServiceLine: s.metadata?.serviceLine ?? null,
+    leadTier: s.metadata?.leadTier ?? null,
+    requestedLeads: Number.isFinite(rlNum) ? rlNum : null,
+    targetingSummary:
+      [s.metadata?.city, s.metadata?.county, s.metadata?.zip].filter(Boolean).join(", ") || null,
+  });
+  fulfillLeadPackFromSession(s);
+  const token = await signDashboardToken(emailCanon);
+  res.json({ token, email: emailCanon });
 });
 
 app.get("/api/my/leads", generalLimit, async (req: Request, res: Response) => {
@@ -392,7 +467,23 @@ app.get("/api/my/leads", generalLimit, async (req: Request, res: Response) => {
     res.status(401).json({ error: "invalid token" });
     return;
   }
-  res.json({ email, leads: getLeadsForEmail(email) });
+  res.json({ email, leads: await getLeadsForEmail(email) });
+});
+
+app.get("/api/my/purchases", generalLimit, async (req: Request, res: Response) => {
+  const auth = req.get("Authorization");
+  const tok = auth?.startsWith("Bearer ") ? auth.slice(7) : undefined;
+  if (!tok) {
+    res.status(401).json({ error: "missing token" });
+    return;
+  }
+  const email = await verifyDashboardToken(tok);
+  if (!email) {
+    res.status(401).json({ error: "invalid token" });
+    return;
+  }
+  const purchases = await listPurchasesForEmail(email);
+  res.json({ email, purchases });
 });
 
 app.get("/api/my/leads/export", generalLimit, async (req: Request, res: Response) => {
@@ -407,7 +498,7 @@ app.get("/api/my/leads/export", generalLimit, async (req: Request, res: Response
     res.status(401).json({ error: "invalid token" });
     return;
   }
-  const leads = getLeadsForEmail(email);
+  const leads = await getLeadsForEmail(email);
   const header = ["id", "mls", "address", "city", "state", "zip", "listPrice", "phone", "email", "soldAt"].join(",");
   const lines = leads.map(
     (l) =>

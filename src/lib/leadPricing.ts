@@ -25,10 +25,10 @@ export const LEAD_SERVICE_LINES: readonly {
   headerText: string;
   rowAlt: string;
 }[] = [
-  { id: "ai_outreach", label: "AI Outreach", headerBg: "#14b8a6", headerText: "#0f172a", rowAlt: "#ecfeff" },
-  { id: "live_callers", label: "Live Callers", headerBg: "#2563eb", headerText: "#ffffff", rowAlt: "#eff6ff" },
-  { id: "hybrid", label: "Hybrid (AI + Live)", headerBg: "#22c55e", headerText: "#ffffff", rowAlt: "#f0fdf4" },
-  { id: "data_only", label: "Data Only", headerBg: "#166534", headerText: "#ffffff", rowAlt: "#f0fdf4" },
+  { id: "ai_outreach", label: "AI Outreach", headerBg: "#76b82d", headerText: "#ffffff", rowAlt: "rgba(118, 184, 45, 0.14)" },
+  { id: "live_callers", label: "Live Callers", headerBg: "#2d76b8", headerText: "#ffffff", rowAlt: "rgba(45, 118, 184, 0.1)" },
+  { id: "hybrid", label: "Hybrid (AI + Live)", headerBg: "#7b4397", headerText: "#ffffff", rowAlt: "rgba(123, 67, 151, 0.12)" },
+  { id: "data_only", label: "Data Only", headerBg: "#d97e26", headerText: "#ffffff", rowAlt: "rgba(217, 126, 38, 0.12)" },
 ] as const;
 
 /** Tier index 0..3 = dabble..scale — per homeowner (USD) */

@@ -11,7 +11,7 @@ export function SiteFooter() {
             <div className="rz-footer-rez-brand">
               <BrandLogo variant="footer" className="rz-footer-rez-logo" />
               <p className="rz-footer-rez-tagline">
-                Automated prospecting for teams that sell geography, not guesses.
+                Data, dialer, and live callers—done-for-you prospecting that turns your market into conversations, appointments, and deals.
               </p>
             </div>
             <div>
@@ -21,13 +21,14 @@ export function SiteFooter() {
                 <Link to="/how-it-works">Features</Link>
                 <Link to="/campaign-pricing">Pricing</Link>
                 <Link to="/coverage">Coverage</Link>
-                <Link to="/buy-leads">Buy leads</Link>
+                <Link to="/buy-leads">Start prospecting</Link>
               </nav>
             </div>
             <div>
               <p className="rz-footer-rez-col-title">Company</p>
               <nav className="rz-footer-rez-links" aria-label="Company links">
                 <Link to="/content">Contact</Link>
+                <Link to="/login">Log in</Link>
                 <Link to="/dashboard">Client dashboard</Link>
                 <Link to="/coverage">Areas</Link>
               </nav>

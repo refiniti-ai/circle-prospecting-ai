@@ -26,7 +26,7 @@ export function ContentPage() {
             </li>
             <li>
               <Link to="/buy-leads" style={{ color: "var(--accent-cyan)", fontWeight: 600 }}>
-                Buy lead packs
+                Start prospecting your area
               </Link>
             </li>
             <li>

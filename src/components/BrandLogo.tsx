@@ -6,37 +6,35 @@ type Props = {
   style?: CSSProperties;
 };
 
-const HEADER_LOGO_SRC = "/circle-prospecting-logo.webp";
-const FOOTER_LOGO_SRC = "/circle-logo.webp";
-const FALLBACKS = ["/logo.jpeg", "/logo.svg"] as const;
+const BRAND_LOGO_SRC = "/circle-prospecting-logo.png";
+const FALLBACKS = ["/circle-prospecting-logo.webp", "/circle-prospecting-logo.svg", "/logo.svg", "/logo.jpeg"] as const;
 
 /**
- * Header uses `circle-prospecting-logo.webp`; footer uses `circle-logo.webp`,
- * then JPEG/SVG fallbacks if load fails.
+ * Primary mark: wide PNG in `public/circle-prospecting-logo.png` (header + footer),
+ * then webp/svg/jpeg fallbacks if load fails.
  */
 export function BrandLogo({ variant = "header", className, style }: Props) {
   const [fallbackStep, setFallbackStep] = useState(0);
-  const primarySrc = variant === "footer" ? FOOTER_LOGO_SRC : HEADER_LOGO_SRC;
-  const candidates = [primarySrc, ...FALLBACKS];
-  const src = candidates[fallbackStep] ?? primarySrc;
+  const candidates = [BRAND_LOGO_SRC, ...FALLBACKS];
+  const src = candidates[fallbackStep] ?? BRAND_LOGO_SRC;
   const lastIndex = candidates.length - 1;
 
   const onErr = useCallback(() => {
     setFallbackStep((i) => (i < lastIndex ? i + 1 : i));
   }, [lastIndex]);
 
-  const h = variant === "header" ? 46 : 40;
+  const h = variant === "header" ? 44 : 38;
   return (
     <img
       className={className}
       src={src}
       alt="Circle Prospecting AI"
-      width={variant === "header" ? 320 : 280}
+      width={variant === "header" ? 220 : 200}
       height={h}
       style={{
         height: h,
         width: "auto",
-        maxWidth: variant === "header" ? "min(100%, 305px)" : "100%",
+        maxWidth: variant === "header" ? "min(100%, min(320px, 52vw))" : "min(100%, 280px)",
         display: "block",
         ...style,
       }}

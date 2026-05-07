@@ -75,7 +75,7 @@ export function createStripeWebhookHandler() {
           fulfillLeadPackFromSession(s);
         }
 
-        if (!hasPurchaseNotification(s.id)) {
+        if (!(await hasPurchaseNotification(s.id))) {
           const orderNumber = orderNumberFromSessionId(s.id);
           const customerEmail = s.customer_details?.email || s.customer_email || s.metadata?.customerEmail;
           const lineItems = listLineItems(s);
@@ -108,7 +108,7 @@ export function createStripeWebhookHandler() {
 
           const rlRaw = s.metadata?.requestedLeads || s.metadata?.packSize;
           const rlNum = rlRaw ? Number.parseInt(String(rlRaw), 10) : NaN;
-          markPurchaseNotification(s.id, {
+          await markPurchaseNotification(s.id, {
             orderNumber,
             notifiedAt: new Date().toISOString(),
             checkoutType: s.metadata?.checkoutType || "general",

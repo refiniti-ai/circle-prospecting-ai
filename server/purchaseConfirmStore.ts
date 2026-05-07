@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getFirestoreDb } from "./firebaseAdmin.js";
 
 export type PurchaseNotificationRecord = {
   orderNumber: string;
@@ -27,6 +28,9 @@ type PurchaseLog = {
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(__dir, "data", "purchase-confirmations.json");
 
+const PURCHASE_COLLECTION =
+  process.env.FIREBASE_PURCHASES_COLLECTION?.trim() || "purchase_notifications";
+
 function ensureFile() {
   const dir = path.dirname(DATA);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -47,21 +51,62 @@ function writeLog(log: PurchaseLog) {
   fs.writeFileSync(DATA, JSON.stringify(log, null, 2), "utf8");
 }
 
-export function hasPurchaseNotification(sessionId: string): boolean {
-  const log = readLog();
-  return Boolean(log.sessions[sessionId]);
+/** Plain object safe for Firestore (no undefined). */
+function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord & { sessionId?: string }) {
+  return {
+    sessionId,
+    orderNumber: record.orderNumber,
+    notifiedAt: record.notifiedAt,
+    checkoutType: record.checkoutType,
+    customerEmail: record.customerEmail,
+    amountTotalCents: record.amountTotalCents,
+    currency: record.currency,
+    lineItems: record.lineItems,
+    leadServiceLine: record.leadServiceLine ?? null,
+    leadTier: record.leadTier ?? null,
+    requestedLeads: record.requestedLeads ?? null,
+    targetingSummary: record.targetingSummary ?? null,
+  };
 }
 
-export function markPurchaseNotification(sessionId: string, record: Omit<PurchaseNotificationRecord, "orderNumber"> & { orderNumber: string }) {
+export async function hasPurchaseNotification(sessionId: string): Promise<boolean> {
+  const log = readLog();
+  if (Boolean(log.sessions[sessionId])) return true;
+  const db = getFirestoreDb();
+  if (!db) return false;
+  try {
+    const snap = await db.collection(PURCHASE_COLLECTION).doc(sessionId).get();
+    return snap.exists;
+  } catch (err) {
+    console.error("[purchaseConfirmStore] Firestore read failed for hasPurchase", err);
+    return false;
+  }
+}
+
+export async function markPurchaseNotification(
+  sessionId: string,
+  record: Omit<PurchaseNotificationRecord, "orderNumber"> & { orderNumber: string }
+) {
   const log = readLog();
   log.sessions[sessionId] = record;
   writeLog(log);
+
+  const db = getFirestoreDb();
+  if (db) {
+    try {
+      await db
+        .collection(PURCHASE_COLLECTION)
+        .doc(sessionId)
+        .set(purchaseDocData(sessionId, { ...record, sessionId }), { merge: true });
+    } catch (err) {
+      console.error("[purchaseConfirmStore] Firestore write failed; local JSON saved", err);
+    }
+  }
 }
 
-/** Newest first */
-export function listPurchaseNotifications(): (PurchaseNotificationRecord & { sessionId: string })[] {
+function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] {
   const log = readLog();
-  const rows: (PurchaseNotificationRecord & { sessionId: string })[] = Object.entries(log.sessions).map(([sessionId, raw]) => ({
+  return Object.entries(log.sessions).map(([sessionId, raw]) => ({
     sessionId,
     orderNumber: raw.orderNumber,
     notifiedAt: raw.notifiedAt,
@@ -75,6 +120,42 @@ export function listPurchaseNotifications(): (PurchaseNotificationRecord & { ses
     requestedLeads: raw.requestedLeads ?? null,
     targetingSummary: raw.targetingSummary ?? null,
   }));
+}
+
+/** Newest first — merges Firestore + local JSON (Firestore wins per session id). */
+export async function listPurchaseNotifications(): Promise<(PurchaseNotificationRecord & { sessionId: string })[]> {
+  const fromFile = rowsFromFile();
+  const merged = new Map<string, PurchaseNotificationRecord & { sessionId: string }>();
+  for (const r of fromFile) merged.set(r.sessionId, r);
+
+  const db = getFirestoreDb();
+  if (db) {
+    try {
+      const snap = await db.collection(PURCHASE_COLLECTION).get();
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        const sessionId = doc.id;
+        merged.set(sessionId, {
+          sessionId,
+          orderNumber: String(d.orderNumber ?? ""),
+          notifiedAt: String(d.notifiedAt ?? ""),
+          checkoutType: String(d.checkoutType ?? "unknown"),
+          customerEmail: d.customerEmail != null ? String(d.customerEmail) : null,
+          amountTotalCents: typeof d.amountTotalCents === "number" ? d.amountTotalCents : null,
+          currency: d.currency != null ? String(d.currency) : null,
+          lineItems: Array.isArray(d.lineItems) ? (d.lineItems as string[]) : [],
+          leadServiceLine: d.leadServiceLine != null ? String(d.leadServiceLine) : null,
+          leadTier: d.leadTier != null ? String(d.leadTier) : null,
+          requestedLeads: typeof d.requestedLeads === "number" ? d.requestedLeads : null,
+          targetingSummary: d.targetingSummary != null ? String(d.targetingSummary) : null,
+        });
+      }
+    } catch (err) {
+      console.error("[purchaseConfirmStore] Firestore list failed; using file-only", err);
+    }
+  }
+
+  const rows = Array.from(merged.values());
   rows.sort((a, b) => (a.notifiedAt < b.notifiedAt ? 1 : -1));
   return rows;
 }
@@ -83,4 +164,12 @@ export function orderNumberFromSessionId(sessionId: string): string {
   const compact = sessionId.replace(/^cs_(test|live)_/, "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   const tail = compact.slice(-10).padStart(10, "0");
   return `CP-${tail}`;
+}
+
+/** Purchases tied to this email (e.g. client dashboard after JWT or future Google login). */
+export async function listPurchasesForEmail(email: string): Promise<(PurchaseNotificationRecord & { sessionId: string })[]> {
+  const e = email.trim().toLowerCase();
+  if (!e.includes("@")) return [];
+  const all = await listPurchaseNotifications();
+  return all.filter((p) => (p.customerEmail || "").trim().toLowerCase() === e);
 }

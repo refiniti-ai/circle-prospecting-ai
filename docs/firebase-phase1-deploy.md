@@ -1,25 +1,63 @@
 # Firebase-Only Phase 1 Deploy
 
-This project can run as a single-domain setup on Firebase Hosting with `/api/**` rewritten to Cloud Run.
+The SPA is on Firebase Hosting. The Express API must be reachable over HTTPS from the browser.
 
-## 1) Verify rewrite target
+## Choose one
 
-`firebase.json` currently points to:
+### A) API on its own URL (default `firebase.json`)
 
-- service: `circle-prospecting-api`
-- region: `us-central1`
+Hosting does **not** rewrite `/api/**`. The production build must include your API origin:
 
-If your Cloud Run service name/region is different, edit:
+1. Deploy the API container (Cloud Run, Render, etc.) and copy its HTTPS base URL (no path, no trailing slash), e.g. `https://circle-prospecting-api-xxxxx-uc.a.run.app`.
+2. In `.env` or `.env.production` (used when you run `npm run build`):
 
-- `hosting.rewrites[0].run.serviceId`
-- `hosting.rewrites[0].run.region`
+   ```bash
+   VITE_API_BASE_URL=https://YOUR-API-ORIGIN
+   ```
 
-## 2) API runtime environment (Cloud Run)
+3. On the API set at least:
 
-Set these on Cloud Run:
+   - `APP_PUBLIC_URL=https://YOUR_PROJECT.web.app`
+   - `CORS_ORIGIN=https://YOUR_PROJECT.web.app`
+   - Stripe and other secrets as in `.env.example`
 
-- `API_PORT=8080`
-- `APP_PUBLIC_URL=https://circle-prospecting-ai.web.app`
+4. **Stripe webhook** (server-to-server) must hit the **API** URL, not Hosting:
+
+   - `https://YOUR-API-ORIGIN/api/webhooks/stripe`
+
+5. Build and deploy:
+
+   ```bash
+   npm run build
+   firebase deploy --only hosting
+   ```
+
+### B) Same domain `/api/*` → Cloud Run
+
+1. Create Cloud Run service **`circle-prospecting-api`** in **`us-central1`** (Google Cloud Console or `gcloud run deploy ...`).
+2. Add the **first** rewrite in `firebase.json` **before** the `**` rule:
+
+   ```json
+   {
+     "source": "/api/**",
+     "run": {
+       "serviceId": "circle-prospecting-api",
+       "region": "us-central1"
+     }
+   }
+   ```
+
+3. Leave **`VITE_API_BASE_URL` empty** when building; the SPA calls relative `/api/*`.
+4. Stripe webhook can use the Hosting URL:
+
+   - `https://YOUR_PROJECT.web.app/api/webhooks/stripe`
+
+## API runtime environment (Cloud Run or other)
+
+Set these on the API process:
+
+- `PORT=8080` (Cloud Run sets this automatically)
+- `APP_PUBLIC_URL=https://circle-prospecting-ai.web.app` (match your site)
 - `CORS_ORIGIN=https://circle-prospecting-ai.web.app`
 - `STRIPE_SECRET_KEY=...`
 - `STRIPE_WEBHOOK_SECRET=...`
@@ -27,43 +65,26 @@ Set these on Cloud Run:
 - `DASHBOARD_JWT_SECRET=...`
 - `PURCHASE_NOTIFICATION_EMAIL=you@yourdomain.com`
 
-Optional in Phase 1:
+Optional:
 
 - `FIREBASE_SERVICE_ACCOUNT_PATH` or `FIREBASE_SERVICE_ACCOUNT_JSON`
+- `GHL_MAIL_WEBHOOK_URL`, `SMTP_*`
 
-Leave for Phase 2:
+## Deploy API to Cloud Run (CLI example)
 
-- `GHL_*`
-- `SMTP_*`
-
-## 3) Frontend build env
-
-For same-domain routing via Firebase rewrite:
-
-- `VITE_API_BASE_URL=` (empty or unset)
-
-Then build and deploy:
+From repo root, after `gcloud` auth and project set:
 
 ```bash
-npm run build
-firebase deploy --only hosting
+gcloud run deploy circle-prospecting-api --source . --region us-central1 --allow-unauthenticated --project YOUR_GCP_PROJECT
 ```
 
-## 4) Stripe webhook
+Configure env vars and secrets in the Cloud Run service (Console or `--set-env-vars` / Secret Manager). Do not bake `secrets/` into the image for production; use Secret Manager or `FIREBASE_SERVICE_ACCOUNT_JSON`.
 
-Set webhook endpoint in Stripe Dashboard:
+See [Firebase Hosting + Cloud Run](https://firebase.google.com/docs/hosting/cloud-run) for linking Hosting to Run.
 
-- `https://circle-prospecting-ai.web.app/api/webhooks/stripe`
+## Smoke test
 
-Copy endpoint signing secret into API env:
-
-- `STRIPE_WEBHOOK_SECRET=whsec_...`
-
-## 5) Smoke test
-
-After deploy, verify:
-
-1. `https://circle-prospecting-ai.web.app/api/health`
-2. Checkout opens Stripe page
-3. Success page shows order number
-4. `/admin/purchases` shows the purchase (after webhook delivery)
+1. Open `https://YOUR_PROJECT.web.app` — buy flow should reach checkout without network errors.
+2. If using path A: `https://YOUR-API-ORIGIN/api/health`
+3. If using path B: `https://YOUR_PROJECT.web.app/api/health`
+4. Complete a test checkout; confirm webhook delivery in Stripe Dashboard.

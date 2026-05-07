@@ -36,7 +36,8 @@ export function JsonLdSite() {
     "@type": "WebSite",
     name: "Circle Prospecting AI",
     url: siteUrl,
-    description: "Automated circle prospecting for modern real estate.",
+    description:
+      "Circle Prospecting AI runs homeowner outreach for you—data, AI dialing, and live callers to create conversations and appointments in your market.",
     potentialAction: {
       "@type": "SearchAction",
       target: `${siteUrl}/#contact`,
@@ -56,7 +57,7 @@ export function JsonLdOrg() {
     "@type": "Organization",
     name: "Circle Prospecting AI",
     url: siteUrl,
-    logo: `${siteUrl}/circle-prospecting-logo.webp`,
+    logo: `${siteUrl}/circle-prospecting-logo.png`,
     sameAs: [],
   };
   return (

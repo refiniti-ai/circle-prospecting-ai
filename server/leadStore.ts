@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import type { Lead, LeadInventory } from "./leadTypes.js";
+import { fetchClientLeadsForEmail, syncClientLeadsToFirestore } from "./clientLeadsFirestore.js";
 
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -67,17 +68,34 @@ export function getSummary() {
   return { total: inv.leads.length, available, sold, updatedAt: inv.lastUpdated };
 }
 
-export function getLeadsForEmail(email: string) {
+export async function getLeadsForEmail(email: string): Promise<Lead[]> {
   const e = email.trim().toLowerCase();
-  return readInventory()
+  const fromFile = readInventory()
     .leads.filter((l) => l.status === "sold" && (l.soldToEmail || "").toLowerCase() === e)
     .sort((a, b) => (b.soldAt || "").localeCompare(a.soldAt || ""));
+
+  let fromCloud: Lead[] = [];
+  try {
+    fromCloud = await fetchClientLeadsForEmail(e);
+  } catch (err) {
+    console.error("[leadStore] Firestore client leads read failed; file only", err);
+  }
+  if (fromCloud.length === 0) return fromFile;
+
+  const map = new Map<string, Lead>();
+  for (const l of fromFile) map.set(l.id, l);
+  for (const l of fromCloud) {
+    const prev = map.get(l.id);
+    if (!prev || (l.soldAt || "") >= (prev.soldAt || "")) map.set(l.id, l);
+  }
+  return Array.from(map.values()).sort((a, b) => (b.soldAt || "").localeCompare(a.soldAt || ""));
 }
 
 export function allocateLeads(email: string, count: number, stripeSessionId: string): { ok: true; leads: Lead[]; duplicate?: boolean } | { ok: false; error: string } {
   const inv = readInventory();
   const bySession = inv.leads.filter((l) => l.stripeSessionId === stripeSessionId);
   if (bySession.length > 0) {
+    void syncClientLeadsToFirestore(bySession);
     return { ok: true, leads: bySession, duplicate: true };
   }
   const available = inv.leads.filter((l) => l.status === "available");
@@ -96,6 +114,7 @@ export function allocateLeads(email: string, count: number, stripeSessionId: str
     }
   }
   writeInventory(inv);
+  void syncClientLeadsToFirestore(take);
   return { ok: true, leads: take };
 }
 

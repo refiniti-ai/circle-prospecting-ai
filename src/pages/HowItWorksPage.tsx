@@ -1,16 +1,18 @@
 import { Link } from "react-router-dom";
 import { MarketingPageShell } from "../components/marketing/MarketingPageShell";
+import { SalesProcessInfographicSection } from "../components/marketing/PosterSections";
 import { HowItWorksSection } from "../components/marketing/MarketingSections";
 
 export function HowItWorksPage() {
   return (
     <MarketingPageShell
       title="How it works | Circle Prospecting AI"
-      description="From new listing detection to CRM handoff, radius selection, and secure checkout — the full delivery workflow."
+      description="Three steps: pick your target area, we contact homeowners with AI + live callers, you get conversations and opportunities—plus clear checkout."
       path="/how-it-works"
       heroTitle="How it works"
-      heroLead="End-to-end flow for listings, GHL opportunities, lead packs, and circle prospecting — one stack, clear stages."
+      heroLead="Choose your farm, we run the dials and messages on your behalf, and appointments flow back to you—data + dialer + humans in one motion."
     >
+      <SalesProcessInfographicSection />
       <HowItWorksSection />
       <section className="section home-section">
         <div className="container section-surface" style={{ textAlign: "center", padding: "1.5rem" }}>
@@ -19,7 +21,7 @@ export function HowItWorksPage() {
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem", justifyContent: "center" }}>
             <Link to="/leads" className="btn btn-primary">
-              Lead packs
+              Product overview
             </Link>
             <Link to="/coverage" className="btn btn-ghost">
               Coverage &amp; maps
@@ -28,7 +30,7 @@ export function HowItWorksPage() {
               Campaign pricing
             </Link>
             <Link to="/buy-leads" className="btn btn-ghost">
-              Buy leads
+              Start prospecting your area
             </Link>
           </div>
         </div>

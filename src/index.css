@@ -35,6 +35,8 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -45,6 +47,16 @@ body {
   background: var(--bg);
   background-image: none;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+#root {
+  min-width: 0;
+}
+
+#main-content {
+  min-width: 0;
+  max-width: 100%;
 }
 
 a {
@@ -128,12 +140,20 @@ img {
 
 .container {
   width: min(100% - 2.5rem, var(--max));
+  max-width: 100%;
   margin-inline: auto;
+  box-sizing: border-box;
 }
 
 @media (max-width: 640px) {
   .container {
     width: min(100% - 1.25rem, var(--max));
+  }
+}
+
+@media (max-width: 380px) {
+  .container {
+    width: min(100% - 1rem, var(--max));
   }
 }
 

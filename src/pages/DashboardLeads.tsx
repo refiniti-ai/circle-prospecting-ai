@@ -1,54 +1,42 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
-import { claimLeadSession, downloadMyLeadsCsv, fetchMyLeads, type PurchasedLead } from "../lib/leadsApi";
+import { downloadMyLeadsCsv, fetchMyLeads, fetchMyPurchases, type MyPurchaseRow, type PurchasedLead } from "../lib/leadsApi";
 
 const TOKEN_KEY = "cpai_dash_jwt";
 
+function formatPurchaseTotal(cents: number | null, currency: string | null): string {
+  if (cents == null) return "—";
+  const cur = (currency || "usd").toUpperCase();
+  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: cur });
+}
+
 export function DashboardLeads() {
-  const [sp, setSp] = useSearchParams();
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
   const [leads, setLeads] = useState<PurchasedLead[]>([]);
+  const [purchases, setPurchases] = useState<MyPurchaseRow[]>([]);
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [claimBusy, setClaimBusy] = useState(false);
-
-  useEffect(() => {
-    const sessionId = sp.get("session_id");
-    const shouldClaim = sp.get("claim") === "1";
-    if (shouldClaim && sessionId) {
-      setClaimBusy(true);
-      setErr(null);
-      claimLeadSession(sessionId)
-        .then((r) => {
-          localStorage.setItem(TOKEN_KEY, r.token);
-          setToken(r.token);
-          setEmail(r.email);
-          setSp(new URLSearchParams());
-        })
-        .catch((e) => setErr(e instanceof Error ? e.message : "Could not claim session"))
-        .finally(() => setClaimBusy(false));
-    }
-  }, [sp, setSp]);
 
   useEffect(() => {
     if (!token) {
       setLeads([]);
+      setPurchases([]);
       return;
     }
     let ok = true;
-    fetchMyLeads(token)
-      .then((r) => {
-        if (ok) {
-          setLeads(r.leads);
-          setEmail(r.email);
-        }
+    Promise.all([fetchMyLeads(token), fetchMyPurchases(token)])
+      .then(([leadsRes, purchRes]) => {
+        if (!ok) return;
+        setLeads(leadsRes.leads);
+        setPurchases(purchRes.purchases);
+        setEmail(leadsRes.email);
       })
       .catch(() => {
         if (ok) {
-          setErr("Session expired — complete a lead purchase to sign in again.");
+          setErr("Session expired — complete a promotion checkout to sign in again.");
           localStorage.removeItem(TOKEN_KEY);
           setToken("");
         }
@@ -62,11 +50,17 @@ export function DashboardLeads() {
     localStorage.removeItem(TOKEN_KEY);
     setToken("");
     setLeads([]);
+    setPurchases([]);
   }
 
   return (
     <>
-      <SeoHead title="My leads | Circle Prospecting AI" description="Purchased real estate leads" path="/dashboard" noindex />
+      <SeoHead
+        title="My purchases & delivery | Circle Prospecting AI"
+        description="Your orders and promotion delivery for your account email."
+        path="/dashboard"
+        noindex
+      />
       <div className="app-shell rz-shell rz-app">
         <SiteHeader />
         <main id="main-content" tabIndex={-1} className="page-space page-space--tight rzInterior">
@@ -75,44 +69,112 @@ export function DashboardLeads() {
               <p className="page-breadcrumb">
                 <Link to="/">Home</Link> / Client dashboard
               </p>
-              <h1 className="page-h1">My lead delivery</h1>
-              <p className="page-lead" style={{ maxWidth: 720 }}>
-                After a successful Stripe test payment, you are redirected here to claim your session. We assign the first available rows
-                from the admin inventory to your account.
-              </p>
+              <h1 className="page-h1">My account</h1>
             </header>
 
-            {claimBusy && <p className="cp-loading-line">Confirming your payment…</p>}
             {err && <p className="cp-alert cp-alert--error">{err}</p>}
 
-            {!token && !claimBusy && (
+            {!token && (
               <div className="section-surface" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
                 <p className="page-lead" style={{ marginBottom: "1rem" }}>
-                  Purchase a lead pack to receive a session link and access your delivery here.
+                  You are not signed in. Use Log in (Client tab) with your checkout session id, email, and phone.
                 </p>
-                <Link to="/buy-leads" className="btn btn-primary">
-                  Buy a lead pack
-                </Link>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
+                  <Link to="/login" className="btn btn-primary">
+                    Log in
+                  </Link>
+                  <Link to="/buy-leads" className="btn btn-ghost">
+                    Start prospecting
+                  </Link>
+                </div>
               </div>
             )}
 
             {token && email && (
-              <div className="section-surface" style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.75rem" }}>
-                <span style={{ color: "var(--muted)" }}>
+              <div
+                className="section-surface"
+                style={{
+                  marginTop: "1rem",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                  columnGap: "1rem",
+                }}
+              >
+                <span style={{ color: "var(--muted)", flex: "1 1 auto", minWidth: "12rem" }}>
                   Signed in as <strong style={{ color: "var(--text)" }}>{email}</strong>
                 </span>
-                <button type="button" className="link-btn" onClick={logout}>
-                  Sign out
-                </button>
-                <button type="button" className="btn btn-primary" style={{ marginLeft: "auto" }} onClick={() => downloadMyLeadsCsv(token)}>
-                  Download CSV
-                </button>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.65rem", marginLeft: "auto" }}>
+                  <button type="button" className="link-btn" onClick={logout}>
+                    Sign out
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={() => downloadMyLeadsCsv(token)}>
+                    Download lead CSV
+                  </button>
+                </div>
               </div>
             )}
 
-            {token && leads.length === 0 && !err && !claimBusy && (
-              <p className="cp-alert cp-alert--info" style={{ marginTop: "1rem" }}>
-                No leads yet — ask an admin to upload inventory.
+            {token && purchases.length > 0 && (
+              <section style={{ marginTop: "1.75rem" }} aria-labelledby="dash-purchases-h">
+                <h2 className="premium-h2" id="dash-purchases-h" style={{ fontSize: "1.15rem", marginBottom: "0.75rem" }}>
+                  Your purchases
+                </h2>
+                <div className="cp-table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Order ID</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Summary</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchases.map((p) => (
+                        <tr key={p.sessionId}>
+                          <td>
+                            <code className="cp-kbd">{p.orderNumber}</code>
+                          </td>
+                          <td>{p.notifiedAt ? new Date(p.notifiedAt).toLocaleString() : "—"}</td>
+                          <td>{p.checkoutType === "lead_pack" ? "Lead pack" : p.checkoutType}</td>
+                          <td>
+                            <span style={{ display: "block", maxWidth: 320 }}>
+                              {p.lineItems.length ? p.lineItems.join(" · ") : "—"}
+                              {p.targetingSummary ? (
+                                <span className="muted" style={{ display: "block", fontSize: "0.82rem", marginTop: "0.25rem" }}>
+                                  {p.targetingSummary}
+                                </span>
+                              ) : null}
+                            </span>
+                          </td>
+                          <td>{formatPurchaseTotal(p.amountTotalCents, p.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {token && (
+              <section style={{ marginTop: "2rem" }} aria-labelledby="dash-leads-h">
+                <h2 className="premium-h2" id="dash-leads-h" style={{ fontSize: "1.15rem", marginBottom: "0.35rem" }}>
+                  Delivery (assigned leads)
+                </h2>
+                <p className="muted" style={{ margin: "0 0 0.75rem", fontSize: "0.88rem", maxWidth: 640 }}>
+                  Rows are saved to <strong>Firestore</strong> when your server is connected, and merged with local inventory so they still show
+                  here after checkout.
+                </p>
+              </section>
+            )}
+
+            {token && leads.length === 0 && !err && (
+              <p className="cp-alert cp-alert--info" style={{ marginTop: "0.25rem" }}>
+                No delivery rows yet — ask an admin to upload inventory or complete checkout.
               </p>
             )}
 

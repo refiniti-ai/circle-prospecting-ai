@@ -1,7 +1,14 @@
 import { apiBase } from "./apiBase";
-import { publicPricingSnapshot, type LeadServiceLine, type LeadTierId } from "./leadPricing";
+import { type LeadServiceLine, type LeadTierId } from "./leadPricing";
 
-export type LeadPricingSnapshot = ReturnType<typeof publicPricingSnapshot>;
+function assertJsonResponse(r: Response, context: string): void {
+  const ct = r.headers.get("content-type") || "";
+  if (ct.includes("text/html")) {
+    throw new Error(
+      `${context}: the server returned a web page instead of API data. If you use Firebase Hosting (e.g. port 5000) without a reverse proxy, set VITE_API_BASE_URL to your running API (see .env.example) and rebuild—or run \`npm run dev\` so Vite proxies /api to the API.`
+    );
+  }
+}
 
 export type LeadCountRequest = {
   city?: string;
@@ -14,24 +21,23 @@ export type LeadCountRequest = {
   flags?: string[];
 };
 
+export type CampaignPropertyType = "just_listed" | "just_sold";
+
 export type LeadCheckoutContext = {
   city?: string;
   county?: string;
   zip?: string;
   radiusMiles?: number;
   requestedLeads?: number;
+  /** Just listed vs just sold — neighborhood campaign framing (Stripe metadata). */
+  campaignType?: CampaignPropertyType;
 };
-
-export async function fetchLeadPricing(signal?: AbortSignal) {
-  const r = await fetch(`${apiBase()}/api/public/lead-packs`, { signal });
-  if (!r.ok) throw new Error("pricing");
-  return (await r.json()) as LeadPricingSnapshot;
-}
 
 export async function startLeadCheckout(
   serviceLine: LeadServiceLine,
   leadTier: LeadTierId,
   email: string,
+  phone: string,
   context?: LeadCheckoutContext,
   signal?: AbortSignal
 ) {
@@ -39,8 +45,9 @@ export async function startLeadCheckout(
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ serviceLine, leadTier, email, ...context }),
+    body: JSON.stringify({ serviceLine, leadTier, email, phone, ...context }),
   });
+  assertJsonResponse(r, "Checkout");
   if (r.status === 503) {
     const j = (await r.json()) as { message?: string };
     throw new Error(j.message || "Stripe is not configured on the server");
@@ -56,6 +63,7 @@ export async function fetchLeadCount(request: LeadCountRequest, signal?: AbortSi
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(request),
   });
+  assertJsonResponse(r, "Lead count");
   if (!r.ok) throw new Error("count");
   return (await r.json()) as {
     available: number;
@@ -64,13 +72,22 @@ export async function fetchLeadCount(request: LeadCountRequest, signal?: AbortSi
   };
 }
 
-export async function claimLeadSession(sessionId: string) {
+export async function claimLeadSession(sessionId: string, email: string, phone: string) {
   const r = await fetch(`${apiBase()}/api/auth/claim-leads`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId }),
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ sessionId, email: email.trim(), phone: phone.trim() }),
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string };
+      if (j.message) msg = j.message;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not sign in");
+  }
   return (await r.json()) as { token: string; email: string };
 }
 
@@ -94,6 +111,30 @@ export async function fetchMyLeads(token: string) {
   });
   if (!r.ok) throw new Error("Could not load leads");
   return (await r.json()) as { email: string; leads: PurchasedLead[] };
+}
+
+/** Orders recorded for the signed-in email (Stripe webhook and/or claim). Same list when auth is Google later. */
+export type MyPurchaseRow = {
+  sessionId: string;
+  orderNumber: string;
+  notifiedAt: string;
+  checkoutType: string;
+  customerEmail: string | null;
+  amountTotalCents: number | null;
+  currency: string | null;
+  lineItems: string[];
+  leadServiceLine?: string | null;
+  leadTier?: string | null;
+  requestedLeads?: number | null;
+  targetingSummary?: string | null;
+};
+
+export async function fetchMyPurchases(token: string) {
+  const r = await fetch(`${apiBase()}/api/my/purchases`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new Error("Could not load purchases");
+  return (await r.json()) as { email: string; purchases: MyPurchaseRow[] };
 }
 
 export async function downloadMyLeadsCsv(token: string) {

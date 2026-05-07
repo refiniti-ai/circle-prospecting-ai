@@ -11,7 +11,9 @@
     "serve:hosting": "npm run build && firebase serve",
     "preview": "vite preview",
     "start:api": "tsx server/index.ts",
+    "start": "tsx server/index.ts",
     "firestore:smoke": "tsx scripts/firestore-smoke.ts",
+    "workflow:check": "tsx scripts/client-workflow-check.ts",
     "lint": "tsc -b --noEmit",
     "build:geo": "node scripts/build-us-geo.mjs"
   },
@@ -31,7 +33,7 @@
     "react-dom": "^18.3.1",
     "react-helmet-async": "^2.0.5",
     "react-router-dom": "^6.28.0",
-    "stripe": "^17.3.1",
+    "stripe": "^17.7.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

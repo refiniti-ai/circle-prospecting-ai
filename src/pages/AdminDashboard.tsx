@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
@@ -32,14 +32,13 @@ function slugLabel(raw: string | null | undefined): string {
 }
 
 export function AdminDashboard() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : "overview";
 
-  const [adminKeyInput, setAdminKeyInput] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
-  const [loginErr, setLoginErr] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
   const [summary, setSummary] = useState<{
@@ -69,48 +68,26 @@ export function AdminDashboard() {
       setAuthChecking(false);
       return;
     }
-    setAdminKeyInput(saved);
     loadDashboard(saved)
       .then(() => {
         setActiveKey(saved);
         setAuthenticated(true);
-        setLoginErr(null);
       })
       .catch(() => {
         sessionStorage.removeItem(KEY);
-        setAdminKeyInput("");
-        setLoginErr("Saved admin session is invalid or API unreachable.");
       })
       .finally(() => setAuthChecking(false));
   }, [loadDashboard]);
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoginErr(null);
-    const k = adminKeyInput.trim();
-    if (!k) {
-      setLoginErr("Enter the admin API key (same as server ADMIN_API_KEY).");
-      return;
-    }
-    try {
-      await loadDashboard(k);
-      sessionStorage.setItem(KEY, k);
-      setActiveKey(k);
-      setAuthenticated(true);
-    } catch {
-      setLoginErr("Invalid key or cannot reach the API. Check VITE_API_BASE_URL and that the backend is running.");
-    }
-  }
-
   function logout() {
     sessionStorage.removeItem(KEY);
-    setAdminKeyInput("");
     setActiveKey(null);
     setAuthenticated(false);
     setSummary(null);
     setPurchases(null);
     setUploadMsg(null);
     setUploadErr(null);
+    navigate("/login?tab=admin", { replace: true });
   }
 
   async function refresh() {
@@ -195,35 +172,7 @@ export function AdminDashboard() {
         <main id="main-content" tabIndex={-1} className="page-space page-space--tight rzInterior">
           <div className="container" style={{ maxWidth: 1100 }}>
             {!authenticated ? (
-              <div className="page-center-card" style={{ maxWidth: 440, margin: "2rem auto" }}>
-                <h1 className="page-h1" style={{ fontSize: "1.65rem" }}>
-                  Admin sign-in
-                </h1>
-                <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.92rem" }}>
-                  Use the server&apos;s <code className="cp-kbd">ADMIN_API_KEY</code>. Your browser stores it only for this tab session (
-                  <code className="cp-kbd">sessionStorage</code>), not on our servers.
-                </p>
-                <form onSubmit={handleLogin} className="section-surface" style={{ padding: "1.25rem", display: "grid", gap: "1rem" }}>
-                  <label className="cp-form-grid">
-                    <span className="muted-label">Admin API key</span>
-                    <input
-                      type="password"
-                      className="premium-input"
-                      autoComplete="off"
-                      value={adminKeyInput}
-                      onChange={(e) => setAdminKeyInput(e.target.value)}
-                      placeholder="Paste ADMIN_API_KEY"
-                    />
-                  </label>
-                  {loginErr ? <p className="cp-alert cp-alert--error">{loginErr}</p> : null}
-                  <button type="submit" className="btn btn-primary">
-                    Sign in
-                  </button>
-                </form>
-                <p style={{ marginTop: "1.25rem", fontSize: "0.88rem" }}>
-                  <Link to="/">← Back to site</Link>
-                </p>
-              </div>
+              <Navigate to="/login?tab=admin" replace />
             ) : (
               <>
                 <header className="page-hero" style={{ marginBottom: "1rem" }}>
@@ -398,7 +347,7 @@ export function AdminDashboard() {
                         {uploadBusy ? "Uploading…" : "Upload to inventory"}
                       </button>
                       <a className="btn btn-ghost" href="/csv/lead-template.csv" download>
-                        Sample CSV
+                        Campaign CSV template
                       </a>
                     </div>
                   </section>

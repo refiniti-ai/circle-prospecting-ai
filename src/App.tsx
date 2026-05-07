@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { PricingTiersProvider } from "./context/PricingTiersContext";
 import { Home } from "./pages/Home";
 import { LeadsPage } from "./pages/LeadsPage";
@@ -10,6 +10,7 @@ import { Order } from "./pages/Order";
 import { OrderSuccess } from "./pages/OrderSuccess";
 import { BuyLeads } from "./pages/BuyLeads";
 import { DashboardLeads } from "./pages/DashboardLeads";
+import { LoginPage } from "./pages/LoginPage";
 import { AdminLeads } from "./pages/AdminLeads";
 import { AdminPurchases } from "./pages/AdminPurchases";
 import { AdminDashboard } from "./pages/AdminDashboard";
@@ -27,7 +28,9 @@ export default function App() {
       <Route path="/campaign-pricing" element={<CampaignPricingPage />} />
       <Route path="/content" element={<ContentPage />} />
       <Route path="/buy-leads" element={<BuyLeads />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/dashboard" element={<DashboardLeads />} />
+      <Route path="/admin/login" element={<Navigate to="/login?tab=admin" replace />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/leads" element={<AdminLeads />} />
       <Route path="/admin/purchases" element={<AdminPurchases />} />

@@ -1,5 +1,49 @@
 import nodemailer from "nodemailer";
 
+function firstEmailFromList(raw: string): string {
+  const part = raw
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .find((s) => s.includes("@"));
+  return part ?? raw.trim();
+}
+
+/**
+ * When GHL_MAIL_WEBHOOK_URL is set, transactional mail is POSTed to GHL’s Inbound Webhook.
+ * Use a POST with JSON (GET / empty body will error — see GHL workflow docs).
+ * @see https://help.gohighlevel.com/support/solutions/articles/155000003147-workflow-trigger-inbound-webhook
+ */
+async function sendViaGhlMailWebhook(to: string, subject: string, text: string): Promise<void> {
+  const url = process.env.GHL_MAIL_WEBHOOK_URL?.trim();
+  if (!url) return;
+
+  const token = process.env.GHL_BEARER_TOKEN?.trim();
+  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const email = firstEmailFromList(to);
+  const payload = {
+    source: "Circle Prospecting AI",
+    event: "transactional_email",
+    to,
+    email,
+    subject,
+    text,
+    body: text,
+    message: text,
+  };
+
+  const r = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    throw new Error(`GHL mail webhook failed (${r.status}) ${detail.slice(0, 200)}`);
+  }
+}
+
 export function buildMarketingEmail(args: {
   agentName: string;
   address: string;
@@ -43,6 +87,12 @@ export async function sendMarketingEmail(to: string, subject: string, text: stri
 }
 
 export async function sendTextEmail(to: string, subject: string, text: string) {
+  const ghlMail = process.env.GHL_MAIL_WEBHOOK_URL?.trim();
+  if (ghlMail) {
+    await sendViaGhlMailWebhook(to, subject, text);
+    return { mode: "ghl" as const };
+  }
+
   const host = process.env.SMTP_HOST;
   const port = Number.parseInt(process.env.SMTP_PORT || "587", 10);
   const user = process.env.SMTP_USER;

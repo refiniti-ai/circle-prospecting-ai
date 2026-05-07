@@ -19,7 +19,10 @@ export type ListingPayload = {
   radii: Record<RadiusId, { label: string; count: number }>;
 };
 
-/** Demo data from your spec — API can replace this at runtime. */
+/**
+ * Demo listing (Dunedin, FL) for maps, order previews, and `/order/948`—replace via API in production.
+ * Agent/broker fields reflect a realistic campaign example, not an endorsement.
+ */
 export const SAMPLE_LISTING: ListingPayload = {
   id: "948",
   internalId: 948,

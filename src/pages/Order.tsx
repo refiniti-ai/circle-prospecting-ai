@@ -174,7 +174,7 @@ export function Order() {
     <>
       <SeoHead
         title={`Order #${l.internalId} | Circle Prospecting AI`}
-        description="Select your campaign radius, plan, and review pricing before launch."
+        description="Select radius, plan, and pricing—we contact homeowners on your behalf so you get conversations back."
         path={`/order/${l.id}`}
         noindex
       />
@@ -208,9 +208,9 @@ export function Order() {
               <p className="page-breadcrumb">
                 <Link to="/">Home</Link> / Order
               </p>
-              <h1 className="page-h1">Launch your listing campaign</h1>
+              <h1 className="page-h1">Prospect homeowners around this listing</h1>
               <p className="page-lead" style={{ maxWidth: 640 }}>
-                Target nearby homeowners and generate more leads for this listing.
+                Pick the ring and lane—our team runs AI + live outreach so you get callbacks and conversations, not just a map screenshot.
               </p>
             </header>
 

@@ -4,9 +4,11 @@ import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { contactEmail } from "../lib/siteConfig";
+import { apiBase, isApiBaseConfigured } from "../lib/apiBase";
 import {
   fetchLeadCount,
   startLeadCheckout,
+  type CampaignPropertyType,
 } from "../lib/leadsApi";
 import {
   LEAD_SERVICE_LINES,
@@ -43,6 +45,57 @@ const NOMINATIM_HEADERS = {
   "User-Agent": "CircleProspectingAI/1.0 (buy-leads)",
 } as const;
 
+/** Shown when /api is unreachable (e.g. static Hosting only) or inventory has no matching rows — keeps caps/tiers usable. */
+const DEMO_HOMEOWNERS_MATCHED = 7_500;
+const DEMO_INVENTORY_BASE = 18_000;
+
+function apiBaseLooksLikeLocalDev(): boolean {
+  const b = apiBase().toLowerCase();
+  return b.includes("localhost") || b.includes("127.0.0.1");
+}
+
+function isLiveFirebaseHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname;
+  return h.endsWith(".web.app") || h.endsWith(".firebaseapp.com");
+}
+
+function checkoutFetchErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const isNetworkFail =
+    !raw ||
+    raw === "Failed to fetch" ||
+    raw.includes("NetworkError") ||
+    raw.includes("Load failed") ||
+    raw.includes("fetch resource") ||
+    raw.includes("Network request failed");
+  if (!isNetworkFail) return raw || "Checkout error";
+
+  if (typeof window !== "undefined" && isLiveFirebaseHost() && isApiBaseConfigured() && apiBaseLooksLikeLocalDev()) {
+    return "This site was built with VITE_API_BASE_URL pointing at localhost — browsers cannot reach your computer from the internet. Remove or blank VITE_API_BASE_URL for same-domain /api (Cloud Run), or set it to your public HTTPS API URL, then npm run build and redeploy.";
+  }
+
+  if (!isApiBaseConfigured()) {
+    if (import.meta.env.PROD && isLiveFirebaseHost()) {
+      return "This build has no API URL. Deploy the Express API (e.g. Cloud Run), set VITE_API_BASE_URL to that HTTPS origin (no trailing slash), run npm run build, and redeploy Hosting. Set CORS_ORIGIN on the API to this site. Alternatively deploy Cloud Run as circle-prospecting-api (us-central1), restore the /api/** Hosting→Run rewrite in firebase.json, leave VITE_API_BASE_URL empty, rebuild, and redeploy.";
+    }
+    return "Checkout cannot reach an API from this site. Set VITE_API_BASE_URL to your HTTPS API origin (no trailing slash), run npm run build, and redeploy — or use Hosting + Cloud Run with VITE_API_BASE_URL empty.";
+  }
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "this site";
+  return `Could not reach ${apiBase()}. Confirm that URL is reachable from the public internet and CORS_ORIGIN on the API includes ${origin}.`;
+}
+
+function coerceLeadCountDisplay(available: number, baseAvail: number): { available: number; base: number } {
+  if (available < 1 && baseAvail < 1) {
+    return { available: DEMO_HOMEOWNERS_MATCHED, base: DEMO_INVENTORY_BASE };
+  }
+  if (baseAvail < 1 && available >= 1) {
+    return { available, base: Math.max(800, Math.round(available * 1.15)) };
+  }
+  return { available, base: baseAvail };
+}
+
 const CITY_SEARCH_MIN = 2;
 const CITY_SEARCH_MAX = 80;
 
@@ -56,11 +109,15 @@ export function BuyLeads() {
   const [sp] = useSearchParams();
   const canceled = sp.get("canceled");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [campaignType, setCampaignType] = useState<CampaignPropertyType>("just_listed");
   const [serviceLine, setServiceLine] = useState<LeadServiceLine>("ai_outreach");
   /** Explicit plan row (Dabble … Scale); click a row in any pricing table to set service + plan. */
   const [selectedTier, setSelectedTier] = useState<LeadTierId>(() => tierFromLeadCount(500));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** Set when /api returns HTML (e.g. Firebase Hosting without API proxy). */
+  const [apiBackendHint, setApiBackendHint] = useState<string | null>(null);
   const [geo, setGeo] = useState<UsGeoData | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   /** Row key from bundled US cities list (`city|county|ST`). */
@@ -312,11 +369,32 @@ export function BuyLeads() {
         propertyTypes,
         flags,
       });
-      setEstimatedAvailable(result.available);
-      setInventoryBaseAvailable(result.baseAvailableInInventory);
-      setRequestedLeads((n) => Math.min(Math.max(1, n), Math.max(result.available, 1)));
-    } catch {
-      if (!opts?.quiet) setErr("Could not refresh lead count.");
+      let available = result.available;
+      let baseAvail = result.baseAvailableInInventory;
+      const coerced = coerceLeadCountDisplay(available, baseAvail);
+      setEstimatedAvailable(coerced.available);
+      setInventoryBaseAvailable(coerced.base);
+      const cap = Math.max(coerced.available, 1);
+      setRequestedLeads((prev) => {
+        const next = Math.min(Math.max(1, prev), cap);
+        setSelectedTier(tierFromLeadCount(next));
+        return next;
+      });
+      setApiBackendHint(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not refresh lead count.";
+      if (msg.includes("web page instead of API")) setApiBackendHint(msg);
+      else setApiBackendHint(null);
+      if (!opts?.quiet) setErr(msg.includes("web page instead of API") ? msg : "Could not refresh lead count.");
+      const fallback = coerceLeadCountDisplay(0, 0);
+      setEstimatedAvailable(fallback.available);
+      setInventoryBaseAvailable(fallback.base);
+      const cap = Math.max(fallback.available, 1);
+      setRequestedLeads((prev) => {
+        const next = Math.min(Math.max(1, prev), cap);
+        setSelectedTier(tierFromLeadCount(next));
+        return next;
+      });
     } finally {
       setCountLoading(false);
     }
@@ -353,6 +431,11 @@ export function BuyLeads() {
       setErr("Enter a valid email.");
       return;
     }
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
+      setErr("Enter a valid phone number (at least 10 digits).");
+      return;
+    }
     if (!tierBandOk) {
       setErr(
         `Adjust number of leads to match ${selectedTierMeta.packageLabel} (${selectedTierBandLabel} homes), or pick a different plan row.`
@@ -370,17 +453,19 @@ export function BuyLeads() {
         serviceLine,
         selectedTier,
         email.trim(),
+        phone.trim(),
         {
           city: city.trim(),
           county: county.trim(),
           zip: zip.trim(),
           radiusMiles: Number.parseFloat(radius),
           requestedLeads,
+          campaignType,
         }
       );
       window.location.assign(url);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Checkout error");
+      setErr(checkoutFetchErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -389,8 +474,8 @@ export function BuyLeads() {
   return (
     <>
       <SeoHead
-        title="Buy verified real estate leads | Circle Prospecting AI"
-        description="Purchase pre-vetted lead packs. Pay securely with Stripe (test mode supported). Access delivery in your dashboard."
+        title="Start prospecting your area | Circle Prospecting AI"
+        description="Pick just listed or just sold, set your radius, choose data / AI / live lanes—we contact homeowners for you. Secure checkout and dashboard delivery."
         path="/buy-leads"
       />
       <div className="app-shell rz-shell rz-app">
@@ -398,7 +483,7 @@ export function BuyLeads() {
         <main id="main-content" tabIndex={-1} className="page-space page-space--tight rzInterior">
           <div className="container buy-wrap" style={{ maxWidth: 1180 }}>
             <div className="buy-stepper">
-              {["Select Targeting", "Service & rates", "Review & Price", "Checkout"].map((step, idx) => (
+              {["Campaign type", "Neighborhood & radius", "Plan & budget", "Checkout"].map((step, idx) => (
                 <div key={step} className={`buy-step ${idx <= 2 ? "is-active" : ""}`}>
                   <span className="buy-step-n">{idx + 1}</span>
                   <span className="buy-step-t">{step}</span>
@@ -408,29 +493,71 @@ export function BuyLeads() {
 
             <header className="page-hero" style={{ marginBottom: "1rem" }}>
               <p className="page-breadcrumb">
-                <Link to="/">Home</Link> / Buy leads
+                <Link to="/">Home</Link> / Start prospecting
               </p>
-              <h1 className="page-h1 page-h1--gradient">Launch your lead pack campaign</h1>
-              <p className="page-lead" style={{ maxWidth: 700 }}>
-                Build your target audience with map radius + filters, refresh available count, and launch secure checkout.
-                Purchased leads are delivered in your{" "}
+              <h1 className="page-h1 page-h1--gradient">We’ll contact your market for you</h1>
+              <p className="page-lead" style={{ maxWidth: 720 }}>
+                Choose <strong>just listed</strong> or <strong>just sold</strong>, draw the radius, then pick your lane—<strong>data</strong>,{" "}
+                <strong>AI outreach</strong>, or <strong>live callers</strong>. Your budget is how many homeowners we reach; checkout is secure.
+                Status and handoffs live in your{" "}
                 <Link to="/dashboard" style={{ color: "var(--accent-cyan)", fontWeight: 600 }}>
                   dashboard
-                </Link>{" "}
-                with one-click export.
+                </Link>
+                .
               </p>
-              <div className="buy-hero-pills" aria-label="Lead purchase highlights">
-                <span className="buy-hero-pill">Live availability preview</span>
-                <span className="buy-hero-pill">Server-side pricing</span>
-                <span className="buy-hero-pill">Stripe checkout</span>
+              <div className="buy-hero-pills" aria-label="Promotion checkout highlights">
+                <span className="buy-hero-pill">We call &amp; text for you</span>
+                <span className="buy-hero-pill">AI + live caller lanes</span>
+                <span className="buy-hero-pill">Per-homeowner pricing</span>
               </div>
             </header>
-            {canceled && <p className="cp-alert cp-alert--warn">Checkout canceled — adjust your pack and try again.</p>}
+            {canceled && <p className="cp-alert cp-alert--warn">Checkout canceled — adjust your selection and try again.</p>}
+            {import.meta.env.PROD && !isApiBaseConfigured() ? (
+              <div className="cp-alert cp-alert--error" role="alert">
+                <p style={{ margin: "0 0 0.35rem", fontWeight: 700 }}>Checkout needs a public API URL in the build</p>
+                <p style={{ margin: 0, fontSize: "0.92rem", lineHeight: 1.45 }}>
+                  Add <code className="cp-kbd">VITE_API_BASE_URL=https://your-api.example.com</code> to <code className="cp-kbd">.env</code> (your
+                  Express server, no trailing slash), then <code className="cp-kbd">npm run build</code> and redeploy Hosting. On the API, set{" "}
+                  <code className="cp-kbd">CORS_ORIGIN</code> to include this site’s origin and <code className="cp-kbd">APP_PUBLIC_URL</code> to this
+                  hosting URL for Stripe redirects.
+                </p>
+              </div>
+            ) : null}
+            {apiBackendHint ? (
+              <div className="cp-alert cp-alert--warn" role="status">
+                <p style={{ margin: "0 0 0.35rem", fontWeight: 700 }}>API not reachable from this site URL</p>
+                <p style={{ margin: 0, fontSize: "0.92rem", lineHeight: 1.45 }}>{apiBackendHint}</p>
+              </div>
+            ) : null}
             <section className="buy-grid">
               <div className="section-surface buy-card buy-card--filters">
-                <h2 className="premium-h2">Step 1: Select your target area</h2>
-                <p className="muted" style={{ marginBottom: "0.8rem" }}>
-                  Choose how far from your market center you want to target homeowners.
+                <h2 className="premium-h2">Step 1: Campaign type & neighborhood</h2>
+                <p className="muted" style={{ marginBottom: "0.85rem" }}>
+                  Tell us whether this run promotes a <strong>new listing</strong> or a <strong>recent sale</strong>, then define the ring around your property.
+                </p>
+                <div className="buy-campaign-toggle" role="radiogroup" aria-label="Listing or sale campaign">
+                  <button
+                    type="button"
+                    className={`buy-campaign-btn${campaignType === "just_listed" ? " is-selected" : ""}`}
+                    aria-pressed={campaignType === "just_listed"}
+                    onClick={() => setCampaignType("just_listed")}
+                  >
+                    <span className="buy-campaign-btn-title">Just listed</span>
+                    <span className="buy-campaign-btn-sub">New listing promotion</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`buy-campaign-btn${campaignType === "just_sold" ? " is-selected" : ""}`}
+                    aria-pressed={campaignType === "just_sold"}
+                    onClick={() => setCampaignType("just_sold")}
+                  >
+                    <span className="buy-campaign-btn-title">Just sold</span>
+                    <span className="buy-campaign-btn-sub">Sold promotion &amp; social proof</span>
+                  </button>
+                </div>
+                <h3 className="buy-subsection-h">Target area</h3>
+                <p className="muted" style={{ marginBottom: "0.8rem", marginTop: "0.35rem" }}>
+                  Market center (city / county / ZIP) and how far out to reach homeowners.
                 </p>
                 {geoError ? (
                   <div className="cp-alert cp-alert--warn" role="alert">
@@ -594,7 +721,10 @@ export function BuyLeads() {
                   </>
                 )}
                 <div style={{ marginTop: "1rem" }}>
-                  <span className="muted-label">Radius (mi)</span>
+                  <span className="muted-label">Radius (miles from center)</span>
+                  <p className="muted" style={{ margin: "0.25rem 0 0.45rem", fontSize: "0.86rem" }}>
+                    How large a ring around your listing pin to include in this campaign.
+                  </p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginTop: "0.45rem" }} className="buy-radius-row">
                     {["0.25", "0.5", "1.0", "2.0", "3.0", "5.0"].map((r) => (
                       <button
@@ -608,61 +738,67 @@ export function BuyLeads() {
                     ))}
                   </div>
                 </div>
-                <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "1rem" }} className="buy-filters-2">
-                  <div className="cp-form-grid">
-                    <span className="muted-label">Contact info</span>
-                    <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
-                      <label><input type="radio" checked={includeContact === "phones"} onChange={() => setIncludeContact("phones")} /> Phones only</label>
-                      <label><input type="radio" checked={includeContact === "phones_email"} onChange={() => setIncludeContact("phones_email")} /> Phones + Email</label>
+                <details className="buy-advanced-details" style={{ marginTop: "1.15rem" }}>
+                  <summary>Optional audience filters</summary>
+                  <p className="muted" style={{ margin: "0.5rem 0 0.75rem", fontSize: "0.88rem" }}>
+                    Defaults work for most listing campaigns—open this only if you want to narrow contact fields, occupancy, property types, or motivators.
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "1rem" }} className="buy-filters-2">
+                    <div className="cp-form-grid">
+                      <span className="muted-label">Contact info</span>
+                      <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
+                        <label><input type="radio" checked={includeContact === "phones"} onChange={() => setIncludeContact("phones")} /> Phones only</label>
+                        <label><input type="radio" checked={includeContact === "phones_email"} onChange={() => setIncludeContact("phones_email")} /> Phones + Email</label>
+                      </div>
+                    </div>
+                    <div className="cp-form-grid">
+                      <span className="muted-label">Occupancy</span>
+                      <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
+                        <label><input type="radio" checked={occupancy === "absentee"} onChange={() => setOccupancy("absentee")} /> Absentee owner</label>
+                        <label><input type="radio" checked={occupancy === "owner"} onChange={() => setOccupancy("owner")} /> Owner occupied</label>
+                      </div>
                     </div>
                   </div>
-                  <div className="cp-form-grid">
-                    <span className="muted-label">Occupancy</span>
-                    <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
-                      <label><input type="radio" checked={occupancy === "absentee"} onChange={() => setOccupancy("absentee")} /> Absentee owner</label>
-                      <label><input type="radio" checked={occupancy === "owner"} onChange={() => setOccupancy("owner")} /> Owner occupied</label>
+                  <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "1rem" }} className="buy-filters-2">
+                    <div>
+                      <span className="muted-label">Property types</span>
+                      <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
+                        {[
+                          { id: "single_family", label: "Single family" },
+                          { id: "condo", label: "Condo" },
+                          { id: "plex_2_4", label: "2-4 Plex" },
+                        ].map((p) => (
+                          <label key={p.id}>
+                            <input type="checkbox" checked={propertyTypes.includes(p.id)} onChange={() => toggleItem(p.id, propertyTypes, setPropertyTypes)} /> {p.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="muted-label">Motivator flags</span>
+                      <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
+                        {[
+                          { id: "vacant", label: "Vacant" },
+                          { id: "high_equity", label: "High equity" },
+                          { id: "empty_nesters", label: "Empty nesters" },
+                          { id: "likely_distressed", label: "Likely distressed (+$0.20)" },
+                        ].map((f) => (
+                          <label key={f.id}>
+                            <input type="checkbox" checked={flags.includes(f.id)} onChange={() => toggleItem(f.id, flags, setFlags)} /> {f.label}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "1rem" }} className="buy-filters-2">
-                  <div>
-                    <span className="muted-label">Property types</span>
-                    <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
-                      {[
-                        { id: "single_family", label: "Single family" },
-                        { id: "condo", label: "Condo" },
-                        { id: "plex_2_4", label: "2-4 Plex" },
-                      ].map((p) => (
-                        <label key={p.id}>
-                          <input type="checkbox" checked={propertyTypes.includes(p.id)} onChange={() => toggleItem(p.id, propertyTypes, setPropertyTypes)} /> {p.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="muted-label">Motivator flags</span>
-                    <div style={{ display: "grid", gap: "0.3rem", marginTop: "0.4rem" }}>
-                      {[
-                        { id: "vacant", label: "Vacant" },
-                        { id: "high_equity", label: "High equity" },
-                        { id: "empty_nesters", label: "Empty nesters" },
-                        { id: "likely_distressed", label: "Likely distressed (+$0.20)" },
-                      ].map((f) => (
-                        <label key={f.id}>
-                          <input type="checkbox" checked={flags.includes(f.id)} onChange={() => toggleItem(f.id, flags, setFlags)} /> {f.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                </details>
                 <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
                   <button type="button" className="btn btn-primary buy-refresh-btn" onClick={() => void refreshLeadCount()} disabled={countLoading || !geo}>
-                    {countLoading ? "Refreshing..." : "Refresh leads count"}
+                    {countLoading ? "Refreshing..." : "Refresh homeowner count"}
                   </button>
                   <span style={{ color: "var(--muted)", alignSelf: "center" }}>
                     {estimatedAvailable > 0
-                      ? `${estimatedAvailable.toLocaleString()} leads available (${inventoryBaseAvailable.toLocaleString()} currently in inventory base)`
-                      : "Click refresh to estimate count"}
+                      ? `${estimatedAvailable.toLocaleString()} homeowners matched (${inventoryBaseAvailable.toLocaleString()} in inventory base)`
+                      : "Refresh to estimate how many homeowners match"}
                   </span>
                 </div>
               </div>
@@ -678,12 +814,13 @@ export function BuyLeads() {
                   />
                 </div>
                 <p className="muted" style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
-                  Target area: {city}, {county} ({zip}) · radius {radius} mi {locatingMap ? "· locating..." : ""}
+                  {campaignType === "just_listed" ? "Just listed" : "Just sold"} · {city}, {county} ({zip}) · {radius} mi{" "}
+                  {locatingMap ? "· locating..." : ""}
                 </p>
                 {mapNotice ? <p className="muted" style={{ marginTop: "0.35rem", fontSize: "0.82rem" }}>{mapNotice}</p> : null}
                 <div className="buy-map-stats">
                   <div>
-                    <span>Available now</span>
+                    <span>Homeowners matched</span>
                     <strong>{estimatedAvailable.toLocaleString()}</strong>
                   </div>
                   <div>
@@ -695,10 +832,14 @@ export function BuyLeads() {
             </section>
 
             <section className="section-surface buy-card" style={{ marginTop: "1rem" }}>
-              <h2 className="premium-h2" style={{ marginBottom: "0.75rem" }}>Step 2: Choose your lead package</h2>
+              <h2 className="premium-h2" style={{ marginBottom: "0.5rem" }}>Step 2: Promotion plan &amp; budget</h2>
+              <p className="muted" style={{ marginBottom: "0.85rem", fontSize: "0.92rem", maxWidth: 640 }}>
+                Pick how we execute (AI, live, hybrid, or data), choose the <strong>plan band</strong> that matches how many homeowners you want to reach, then set your{" "}
+                <strong>campaign budget</strong>—your total is marketing spend for this neighborhood run, not “minutes.”
+              </p>
 
-              <label className="cp-form-grid" style={{ maxWidth: 280 }}>
-                <span className="muted-label">Number of leads (homes)</span>
+              <label className="cp-form-grid" style={{ maxWidth: 320 }}>
+                <span className="muted-label">Homes to include (sets your budget)</span>
                 <input
                   type="number"
                   className="premium-input"
@@ -709,9 +850,9 @@ export function BuyLeads() {
                 />
               </label>
               <p className="muted" style={{ marginTop: "0.5rem", fontSize: "0.88rem" }}>
-                Selected: <strong>{serviceLineLabel(serviceLine)}</strong> · <strong>{selectedTierMeta.packageLabel}</strong> (
-                {selectedTierMeta.homesLabel} homes) · <strong>{formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier))}</strong> / homeowner →{" "}
-                <strong>{formatMoneyUsd(checkoutTotalCents / 100)}</strong> estimated
+                <strong>{serviceLineLabel(serviceLine)}</strong> · plan <strong>{selectedTierMeta.packageLabel}</strong> (
+                {selectedTierMeta.homesLabel} homes in band) · <strong>{formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier))}</strong> per homeowner →{" "}
+                <strong className="gradient-text">{formatMoneyUsd(checkoutTotalCents / 100)}</strong> estimated campaign total
               </p>
               {!tierBandOk && (
                 <p className="cp-alert cp-alert--warn" style={{ marginTop: "0.65rem" }} role="status">
@@ -749,7 +890,7 @@ export function BuyLeads() {
                           <tr className="buy-price-colheads">
                             <th scope="col">Package</th>
                             <th scope="col">Homes</th>
-                            <th scope="col">Price / Homeowner</th>
+                            <th scope="col">Per home</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -797,11 +938,15 @@ export function BuyLeads() {
             {err && <p className="cp-alert cp-alert--error" style={{ marginTop: "1rem" }}>{err}</p>}
 
             <section className="section-surface buy-card buy-card--summary" style={{ marginTop: "1rem" }}>
-              <h2 className="premium-h2" style={{ marginBottom: "0.8rem" }}>Order summary</h2>
+              <h2 className="premium-h2" style={{ marginBottom: "0.8rem" }}>Step 3: Review &amp; checkout</h2>
               <div className="buy-summary-grid">
+                <div>
+                  <span>Campaign</span>
+                  <strong>{campaignType === "just_listed" ? "Just listed" : "Just sold"}</strong>
+                </div>
                 <div><span>Target area</span><strong>{city}, {county} {zip}</strong></div>
                 <div><span>Radius</span><strong>{radius} mi</strong></div>
-                <div><span>Estimated available</span><strong>{estimatedAvailable.toLocaleString()}</strong></div>
+                <div><span>Homeowners matched</span><strong>{estimatedAvailable.toLocaleString()}</strong></div>
                 <div><span>Inventory base</span><strong>{inventoryBaseAvailable.toLocaleString()}</strong></div>
                 <div>
                   <span>Service</span>
@@ -814,11 +959,11 @@ export function BuyLeads() {
                   </strong>
                 </div>
                 <div>
-                  <span>Leads</span>
+                  <span>Homes in order</span>
                   <strong>{requestedLeads.toLocaleString()}</strong>
                 </div>
                 <div>
-                  <span>Est. total</span>
+                  <span>Campaign total (est.)</span>
                   <strong className="gradient-text">{formatMoneyUsd(checkoutTotalCents / 100)}</strong>
                 </div>
               </div>
@@ -831,7 +976,18 @@ export function BuyLeads() {
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
                     className="premium-input"
-                    placeholder="agent@example.com"
+                    placeholder="you@yourbrokerage.com"
+                  />
+                </label>
+                <label className="cp-form-grid" style={{ maxWidth: 440 }}>
+                  <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Mobile phone</span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    autoComplete="tel"
+                    className="premium-input"
+                    placeholder="+1 (555) 000-0000"
                   />
                 </label>
                 <div className="buy-cta-row">
@@ -855,6 +1011,62 @@ export function BuyLeads() {
             </section>
 
             <style>{`
+              .buy-campaign-toggle {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 0.75rem;
+                margin-bottom: 0.25rem;
+              }
+              @media (max-width: 560px) {
+                .buy-campaign-toggle { grid-template-columns: 1fr; }
+              }
+              .buy-campaign-btn {
+                text-align: left;
+                padding: 0.85rem 1rem;
+                border-radius: 14px;
+                border: 2px solid rgba(15, 23, 42, 0.12);
+                background: #fff;
+                cursor: pointer;
+                transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+                font: inherit;
+              }
+              .buy-campaign-btn.is-selected {
+                border-color: rgba(0, 122, 255, 0.55);
+                box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.18);
+                background: rgba(0, 122, 255, 0.07);
+              }
+              .buy-campaign-btn:focus-visible {
+                outline: 2px solid rgba(0, 122, 255, 0.45);
+                outline-offset: 2px;
+              }
+              .buy-campaign-btn-title {
+                display: block;
+                font-weight: 800;
+                font-size: 1.05rem;
+                color: #0f172a;
+              }
+              .buy-campaign-btn-sub {
+                display: block;
+                font-size: 0.82rem;
+                color: #64748b;
+                margin-top: 0.28rem;
+                line-height: 1.35;
+              }
+              .buy-subsection-h {
+                margin: 1.35rem 0 0;
+                font-size: 1rem;
+                font-weight: 800;
+                color: #0f172a;
+                letter-spacing: -0.02em;
+              }
+              .buy-advanced-details summary {
+                cursor: pointer;
+                font-weight: 700;
+                color: #0f4c86;
+                font-size: 0.92rem;
+                list-style: none;
+              }
+              .buy-advanced-details summary::-webkit-details-marker { display: none; }
               .buy-wrap { max-width: 1180px; }
               .buy-grid {
                 display: grid;
@@ -974,9 +1186,9 @@ export function BuyLeads() {
               }
               .buy-pricing-stack {
                 display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 1rem;
-                align-items: start;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 0.65rem;
+                align-items: stretch;
               }
               .buy-pricing-block {
                 min-width: 0;
@@ -1004,10 +1216,13 @@ export function BuyLeads() {
                 width: 100%;
                 text-align: left;
                 cursor: pointer;
-                padding: 0.65rem 0.9rem;
+                padding: 0.5rem 0.55rem;
                 font-weight: 800;
-                font-size: 1.02rem;
+                font-size: clamp(0.72rem, 0.9vw, 0.95rem);
                 letter-spacing: 0.02em;
+                line-height: 1.2;
+                hyphens: auto;
+                overflow-wrap: break-word;
               }
               .buy-price-title-btn:focus-visible {
                 outline: 2px solid rgba(255,255,255,0.85);
@@ -1023,7 +1238,8 @@ export function BuyLeads() {
               .buy-price-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 0.88rem;
+                font-size: 0.76rem;
+                table-layout: fixed;
               }
               .buy-price-banner {
                 text-align: left;
@@ -1036,17 +1252,27 @@ export function BuyLeads() {
                 background: #f1f5f9;
                 color: #0f172a;
                 font-weight: 700;
-                font-size: 0.72rem;
+                font-size: 0.58rem;
                 text-transform: uppercase;
-                letter-spacing: 0.05em;
-                padding: 0.42rem 0.65rem;
+                letter-spacing: 0.04em;
+                padding: 0.32rem 0.4rem;
                 border-bottom: 1px solid rgba(15, 23, 42, 0.1);
                 text-align: left;
+                vertical-align: bottom;
+              }
+              .buy-price-colheads th:nth-child(3) {
+                text-align: right;
               }
               .buy-price-table td {
-                padding: 0.52rem 0.65rem;
+                padding: 0.38rem 0.4rem;
                 border-bottom: 1px solid rgba(15, 23, 42, 0.06);
                 color: #0f172a;
+                overflow-wrap: anywhere;
+              }
+              .buy-price-table td:nth-child(3) {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
               }
               .buy-price-table tbody tr:last-child td {
                 border-bottom: none;
@@ -1129,11 +1355,36 @@ export function BuyLeads() {
                 flex-wrap: wrap;
               }
               .buy-cta-meta { color: var(--muted); font-size: 0.85rem; }
+              @media (max-width: 1100px) {
+                .buy-pricing-stack {
+                  grid-template-columns: repeat(2, minmax(0, 1fr));
+                  gap: 0.75rem;
+                }
+                .buy-price-table { font-size: 0.8rem; }
+                .buy-price-title-btn {
+                  font-size: 0.92rem;
+                  padding: 0.55rem 0.65rem;
+                }
+                .buy-price-colheads th { font-size: 0.65rem; padding: 0.38rem 0.5rem; }
+                .buy-price-table td { padding: 0.45rem 0.5rem; }
+              }
               @media (max-width: 960px) {
                 .buy-grid { grid-template-columns: 1fr !important; }
                 .buy-pack-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-                .buy-pricing-stack { grid-template-columns: 1fr; }
                 .buy-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+              }
+              @media (max-width: 600px) {
+                .buy-pricing-stack {
+                  grid-template-columns: 1fr;
+                  gap: 0.85rem;
+                }
+                .buy-price-table { font-size: 0.88rem; }
+                .buy-price-title-btn {
+                  font-size: 1.02rem;
+                  padding: 0.65rem 0.85rem;
+                }
+                .buy-price-colheads th { font-size: 0.72rem; padding: 0.42rem 0.65rem; }
+                .buy-price-table td { padding: 0.52rem 0.65rem; }
               }
               @media (max-width: 720px) {
                 .buy-filters-3, .buy-filters-2 { grid-template-columns: 1fr !important; }

@@ -25,13 +25,15 @@ export function Legal({ kind }: { kind: Kind }) {
               <h1 className="page-h1" style={{ marginTop: 0 }}>{title}</h1>
               <div className="page-prose">
                 <p>
-                  This is placeholder copy. Replace with counsel-approved language. Contact{" "}
-                  <a href="mailto:legal@circleprospecting.ai">legal@circleprospecting.ai</a> for the latest version.
+                  <strong>Draft summary only.</strong> Final Privacy Policy and Terms of Service must be reviewed and approved by your
+                  counsel. For the official version, contact{" "}
+                  <a href="mailto:legal@circleprospecting.ai">legal@circleprospecting.ai</a>.
                 </p>
                 <h2>Summary</h2>
                 <p>
-                  Circle Prospecting AI provides prospecting and workflow tooling for real estate teams. We process listing and
-                  contact data in line with your instructions and service agreements{isPrivacy ? ", and we take privacy seriously" : ""}.
+                  Circle Prospecting AI provides done-for-you neighborhood marketing around real estate listings and sales—workflow,
+                  checkout, and data handling tied to those campaigns. We process listing and contact data as described in your service
+                  agreement{isPrivacy ? "; this draft highlights how we approach privacy" : ""}.
                 </p>
                 <h2>Contact</h2>
                 <p>

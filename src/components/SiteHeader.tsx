@@ -49,15 +49,20 @@ export function SiteHeader() {
                 </NavLink>
               ))}
               <NavLink to="/buy-leads" className={({ isActive }) => (isActive ? "nav-link-buy-active" : "nav-link-buy")} end>
-                Buy leads
+                Start prospecting
               </NavLink>
             </nav>
             <div className="header-actions">
+              <div className="rz-header-auth-links" aria-label="Account">
+                <Link to="/login" className="rz-header-auth-link" onClick={() => setOpen(false)}>
+                  Log in
+                </Link>
+              </div>
               <Link to="/content" className="btn btn-ghost rz-header-btn-demo" onClick={() => setOpen(false)}>
-                Book a demo
+                Get demo
               </Link>
               <Link to="/buy-leads" className="btn btn-primary rz-header-btn-primary" onClick={() => setOpen(false)}>
-                Get started
+                Start prospecting
                 <IconArrow />
               </Link>
             </div>
@@ -82,13 +87,18 @@ export function SiteHeader() {
                 </NavLink>
               ))}
               <NavLink to="/buy-leads" end onClick={() => setOpen(false)} className={({ isActive }) => (isActive ? "nav-link-buy-active" : "nav-link-buy")}>
-                Buy leads
+                Start prospecting
               </NavLink>
+              <div className="rz-mobile-auth-row">
+                <Link to="/login" className="rz-mobile-auth-link" onClick={() => setOpen(false)}>
+                  Log in
+                </Link>
+              </div>
               <Link to="/content" className="btn btn-ghost rz-mobile-btn-full" onClick={() => setOpen(false)}>
-                Book a demo
+                Get demo
               </Link>
               <Link to="/buy-leads" className="btn btn-primary rz-mobile-btn-full" onClick={() => setOpen(false)}>
-                Get started <IconArrow />
+                Start prospecting <IconArrow />
               </Link>
             </div>
           )}
@@ -124,9 +134,47 @@ export function SiteHeader() {
           display: flex;
           align-items: center;
           gap: 0.55rem;
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
           justify-content: flex-end;
           min-width: 0;
+        }
+        .rz-header-auth-links {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          margin-right: 0.15rem;
+        }
+        .rz-header-auth-sep {
+          color: var(--muted);
+          font-size: 0.75rem;
+          user-select: none;
+        }
+        .rz-header-auth-link {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: var(--muted);
+          white-space: nowrap;
+          text-decoration: none;
+        }
+        .rz-header-auth-link:hover {
+          color: var(--text);
+        }
+        .rz-mobile-auth-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.65rem 1rem;
+          padding: 0.35rem 0 0.15rem;
+          border-top: 1px solid rgba(5, 12, 26, 0.08);
+          margin-top: 0.35rem;
+        }
+        .rz-mobile-auth-link {
+          font-size: 0.88rem;
+          font-weight: 600;
+          color: var(--cp-blue, #007aff);
+          text-decoration: none;
+        }
+        .rz-mobile-auth-link:hover {
+          text-decoration: underline;
         }
         .rz-header-btn-demo {
           padding: 0.48rem 1.05rem !important;

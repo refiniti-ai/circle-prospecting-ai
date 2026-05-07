@@ -8,7 +8,7 @@ export function CoveragePage() {
       description="Subdivision through ZIP-level radius counts, map preview, and farm targeting for circle prospecting."
       path="/coverage"
       heroTitle="Coverage"
-      heroLead="Illustrative reach metrics and a live map preview — the same radius ladder your agents see on the order screen."
+      heroLead="Live map preview and radius ladder—the same ring options agents see when launching a just-listed or just-sold neighborhood campaign."
     >
       <StatBarSection />
       <MapFarmSection />

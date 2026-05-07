@@ -46,8 +46,7 @@ function IconSpark() {
 }
 
 /**
- * Post-hero device mock inspired by Rezora’s homepage: dark phone chrome, centered,
- * grayscale logo strip overlaps below — adapted for Circle (sample request, not inbound call).
+ * Post-hero device mock: routes to `/buy-leads` so agents continue into campaign selection (listing-led flow).
  */
 export function RzPostHeroPhoneMarquee() {
   const navigate = useNavigate();
@@ -111,10 +110,11 @@ export function RzPostHeroPhoneMarquee() {
                       </div>
                       <div className="rz-phone-head-block">
                         <h2 id="rz-phone-stage-h" className="rz-phone-headline">
-                          Put your next farm to the test
+                          Start prospecting your area
                         </h2>
                         <p className="rz-phone-lead">
-                          Drop your details — we&apos;ll route you to packs and ring pricing in one flow.
+                          Tell us who you are—we&apos;ll open targeting, lanes (data / AI / live), and pricing so you can launch conversations
+                          fast.
                         </p>
                       </div>
                       <form className="rz-phone-form" onSubmit={onSampleSubmit} noValidate>
@@ -144,7 +144,7 @@ export function RzPostHeroPhoneMarquee() {
                           <input name="tel" type="tel" autoComplete="tel" placeholder="Phone" aria-label="Phone" className="rz-phone-input" />
                         </label>
                         <button type="submit" className="rz-phone-submit">
-                          Continue to lead packs
+                          Start prospecting your area
                         </button>
                         <p className="rz-phone-legal">
                           By continuing you agree to our{" "}
@@ -170,7 +170,10 @@ export function RzPostHeroPhoneMarquee() {
 
       <div className="rz-phone-marquee-flyover">
         <div className="rz-phone-marquee-pad">
-          <section aria-label="Teams at brokerages like these trust similar stacks" className="rz-logo-marquee rz-logo-marquee--embed">
+          <section
+            aria-label="Roles that run outsourced prospecting and ISA programs"
+            className="rz-logo-marquee rz-logo-marquee--embed"
+          >
             <div className="rz-logo-marquee-viewport rz-stagger-child">
               <div className="rz-logo-marquee-track">
                 {doubled.map((b, i) => (

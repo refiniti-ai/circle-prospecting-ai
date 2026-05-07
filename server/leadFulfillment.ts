@@ -3,7 +3,7 @@ import { allocateLeads } from "./leadStore.js";
 
 export function fulfillLeadPackFromSession(session: Stripe.Checkout.Session) {
   if (session.metadata?.checkoutType !== "lead_pack") return;
-  const packSize = Number(session.metadata?.packSize || 0);
+  const packSize = Number(session.metadata?.packSize || session.metadata?.requestedLeads || 0);
   const email = session.customer_details?.email || session.customer_email || session.metadata?.customerEmail;
   if (!email || !packSize) {
     console.error("lead pack fulfillment: missing email or pack size", session.id);
