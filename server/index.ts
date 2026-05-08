@@ -36,7 +36,8 @@ import {
 import { getFirestoreDb } from "./firebaseAdmin.js";
 
 /** Cloud Run sets PORT (usually 8080); local dev uses API_PORT or 8787. */
-const PORT = Number.parseInt(process.env.PORT || process.env.API_PORT || "8787", 10);
+const PORT = Number.parseInt(process.env.PORT || process.env.API_PORT || "8080", 10);
+
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
@@ -631,8 +632,8 @@ app.post("/api/checkout", checkoutLimit, async (req: Request, res: Response) => 
   res.json({ url: session.url, sessionId: session.id, amountCents });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`API listening on http://127.0.0.1:${PORT} (CORS: ${allowedOrigins.join(", ")})`);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`API listening on port ${PORT}`);
 });
 server.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {
