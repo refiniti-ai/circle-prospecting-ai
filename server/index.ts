@@ -49,8 +49,20 @@ function buildAllowedOrigins(): string[] {
   const appPublic = process.env.APP_PUBLIC_URL?.trim().replace(/\/$/, "");
   if (appPublic?.startsWith("http")) {
     try {
-      const origin = new URL(appPublic).origin;
+      const u = new URL(appPublic);
+      const origin = u.origin;
       if (!fromEnv.includes(origin)) fromEnv.push(origin);
+      // Firebase Hosting uses both *.web.app and *.firebaseapp.com for the same app; CORS must allow both.
+      const host = u.hostname;
+      if (host.endsWith(".web.app")) {
+        const slug = host.slice(0, -".web.app".length);
+        const sibling = `https://${slug}.firebaseapp.com`;
+        if (!fromEnv.includes(sibling)) fromEnv.push(sibling);
+      } else if (host.endsWith(".firebaseapp.com")) {
+        const slug = host.slice(0, -".firebaseapp.com".length);
+        const sibling = `https://${slug}.web.app`;
+        if (!fromEnv.includes(sibling)) fromEnv.push(sibling);
+      }
     } catch {
       /* ignore bad URL */
     }

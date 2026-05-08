@@ -73,11 +73,27 @@ export async function fetchLeadCount(request: LeadCountRequest, signal?: AbortSi
 }
 
 export async function claimLeadSession(sessionId: string, email: string, phone: string) {
-  const r = await fetch(`${apiBase()}/api/auth/claim-leads`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ sessionId, email: email.trim(), phone: phone.trim() }),
-  });
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/claim-leads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ sessionId, email: email.trim(), phone: phone.trim() }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (
+      !raw ||
+      raw === "Failed to fetch" ||
+      raw.includes("NetworkError") ||
+      raw.includes("Load failed")
+    ) {
+      throw new Error(
+        "Could not reach the API (network or CORS). Redeploy Cloud Run after CORS updates, or confirm /api/health on your API returns JSON."
+      );
+    }
+    throw e;
+  }
   if (!r.ok) {
     let msg = await r.text();
     try {
