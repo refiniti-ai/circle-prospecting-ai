@@ -32,3 +32,14 @@ export function emailMatchesSession(s: CheckoutSession, email: string): boolean 
   if (!want.includes("@")) return false;
   return sessionEmails(s).some((e) => e === want);
 }
+
+/** Best email for account linking (Stripe checkout). */
+export function canonicalCheckoutEmail(s: CheckoutSession): string | null {
+  const fromMeta = s.metadata?.customerEmail?.trim().toLowerCase();
+  if (fromMeta?.includes("@")) return fromMeta;
+  const ce = s.customer_email?.trim().toLowerCase();
+  if (ce?.includes("@")) return ce;
+  const cd = s.customer_details?.email?.trim().toLowerCase();
+  if (cd?.includes("@")) return cd;
+  return null;
+}

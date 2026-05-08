@@ -36,7 +36,7 @@ export function DashboardLeads() {
       })
       .catch(() => {
         if (ok) {
-          setErr("Session expired — complete a promotion checkout to sign in again.");
+          setErr("Session expired — sign in again with your email and password.");
           localStorage.removeItem(TOKEN_KEY);
           setToken("");
         }
@@ -77,7 +77,8 @@ export function DashboardLeads() {
             {!token && (
               <div className="section-surface" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
                 <p className="page-lead" style={{ marginBottom: "1rem" }}>
-                  You are not signed in. Use Log in (Client tab) with your checkout session id, email, and phone.
+                  You are not signed in. Use <strong>Log in</strong> with the email and password you set on the thank-you
+                  page after checkout.
                 </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
                   <Link to="/login" className="btn btn-primary">
@@ -117,6 +118,14 @@ export function DashboardLeads() {
               </div>
             )}
 
+            {token && purchases.length === 0 && !err && (
+              <p className="muted" style={{ marginTop: "1rem", fontSize: "0.9rem", maxWidth: 560 }}>
+                No orders are listed yet. If you just paid, wait a few seconds for the server to record your purchase,
+                then refresh. You can also complete <strong>Create your dashboard password</strong> on the thank-you
+                page so your account is linked.
+              </p>
+            )}
+
             {token && purchases.length > 0 && (
               <section style={{ marginTop: "1.75rem" }} aria-labelledby="dash-purchases-h">
                 <h2 className="premium-h2" id="dash-purchases-h" style={{ fontSize: "1.15rem", marginBottom: "0.75rem" }}>
@@ -131,6 +140,8 @@ export function DashboardLeads() {
                         <th>Type</th>
                         <th>Summary</th>
                         <th>Total</th>
+                        <th>Payment</th>
+                        <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -152,6 +163,8 @@ export function DashboardLeads() {
                             </span>
                           </td>
                           <td>{formatPurchaseTotal(p.amountTotalCents, p.currency)}</td>
+                          <td>{p.paymentStatus ?? "Paid"}</td>
+                          <td>{p.orderStatus ?? "Confirmed"}</td>
                         </tr>
                       ))}
                     </tbody>

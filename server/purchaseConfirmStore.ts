@@ -8,6 +8,8 @@ export type PurchaseNotificationRecord = {
   notifiedAt: string;
   checkoutType: string;
   customerEmail: string | null;
+  /** Last 10 digits from checkout metadata; helps identity login without Stripe round-trips. */
+  customerPhoneDigits?: string | null;
   amountTotalCents: number | null;
   currency: string | null;
   lineItems: string[];
@@ -59,6 +61,7 @@ function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord &
     notifiedAt: record.notifiedAt,
     checkoutType: record.checkoutType,
     customerEmail: record.customerEmail,
+    customerPhoneDigits: record.customerPhoneDigits ?? null,
     amountTotalCents: record.amountTotalCents,
     currency: record.currency,
     lineItems: record.lineItems,
@@ -112,6 +115,7 @@ function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] 
     notifiedAt: raw.notifiedAt,
     checkoutType: raw.checkoutType ?? "unknown",
     customerEmail: raw.customerEmail ?? null,
+    customerPhoneDigits: raw.customerPhoneDigits ?? null,
     amountTotalCents: raw.amountTotalCents ?? null,
     currency: raw.currency ?? null,
     lineItems: raw.lineItems ?? [],
@@ -141,6 +145,7 @@ export async function listPurchaseNotifications(): Promise<(PurchaseNotification
           notifiedAt: String(d.notifiedAt ?? ""),
           checkoutType: String(d.checkoutType ?? "unknown"),
           customerEmail: d.customerEmail != null ? String(d.customerEmail) : null,
+          customerPhoneDigits: d.customerPhoneDigits != null ? String(d.customerPhoneDigits) : null,
           amountTotalCents: typeof d.amountTotalCents === "number" ? d.amountTotalCents : null,
           currency: d.currency != null ? String(d.currency) : null,
           lineItems: Array.isArray(d.lineItems) ? (d.lineItems as string[]) : [],
@@ -172,4 +177,18 @@ export async function listPurchasesForEmail(email: string): Promise<(PurchaseNot
   if (!e.includes("@")) return [];
   const all = await listPurchaseNotifications();
   return all.filter((p) => (p.customerEmail || "").trim().toLowerCase() === e);
+}
+
+/** Newest first (same order as listPurchaseNotifications). */
+export async function listLeadPackSessionIdsForEmail(email: string): Promise<string[]> {
+  const e = email.trim().toLowerCase();
+  if (!e.includes("@")) return [];
+  const all = await listPurchaseNotifications();
+  const out: string[] = [];
+  for (const p of all) {
+    if (p.checkoutType === "lead_pack" && (p.customerEmail || "").trim().toLowerCase() === e) {
+      out.push(p.sessionId);
+    }
+  }
+  return out;
 }

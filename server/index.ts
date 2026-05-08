@@ -24,10 +24,17 @@ import {
 import { getSummary, upsertLeadsFromRows, getLeadsForEmail, estimateLeadCount } from "./leadStore.js";
 import { signAdminToken, signDashboardToken, verifyAdminToken, verifyDashboardToken } from "./dashboardAuth.js";
 import { fulfillLeadPackFromSession } from "./leadFulfillment.js";
-import { emailMatchesSession, normalizePhoneDigits, phonesMatch } from "./checkoutIdentity.js";
+import {
+  canonicalCheckoutEmail,
+  emailMatchesSession,
+  normalizePhoneDigits,
+  phonesMatch,
+} from "./checkoutIdentity.js";
+import { getClientAccount, hashPassword, upsertClientPassword, verifyPassword } from "./clientAccountStore.js";
 import { createStripeWebhookHandler } from "./stripeWebhook.js";
 import { processInboundNewListing } from "./newListingWorkflow.js";
 import {
+  listLeadPackSessionIdsForEmail,
   listPurchaseNotifications,
   listPurchasesForEmail,
   markPurchaseNotification,
@@ -159,6 +166,27 @@ app.post(
 );
 
 app.use(express.json({ limit: "48kb" }));
+
+const clientLoginBody = z.object({
+  email: z.string().email(),
+  password: z.string().min(1).max(200),
+});
+
+app.post("/api/auth/client-login", generalLimit, async (req: Request, res: Response) => {
+  const parsed = clientLoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+  const acc = await getClientAccount(email);
+  if (!acc || !(await verifyPassword(parsed.data.password, acc.salt, acc.passwordHash))) {
+    res.status(401).json({ error: "invalid_credentials", message: "Invalid email or password." });
+    return;
+  }
+  const token = await signDashboardToken(email);
+  res.json({ token, email });
+});
 
 app.get("/api/health", generalLimit, (_req: Request, res: Response) => {
   let firestore = false;
@@ -452,10 +480,152 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
   res.json({ url: session.url, sessionId: session.id, unitAmountCents });
 });
 
+async function finalizeLeadPackDashboardClaim(
+  s: Stripe.Checkout.Session,
+  emailRaw: string
+): Promise<{ token: string; email: string }> {
+  const emailCanon = emailRaw.trim().toLowerCase();
+  const orderNumber = orderNumberFromSessionId(s.id);
+  const rlRaw = s.metadata?.requestedLeads || s.metadata?.packSize;
+  const rlNum = rlRaw ? Number.parseInt(String(rlRaw), 10) : NaN;
+  const campaign = s.metadata?.campaignType ? String(s.metadata.campaignType) : "";
+  const pd = normalizePhoneDigits(String(s.metadata?.customerPhone || ""));
+  const customerPhoneDigits = pd.length >= 10 ? pd.slice(-10) : null;
+  await markPurchaseNotification(s.id, {
+    orderNumber,
+    notifiedAt: new Date().toISOString(),
+    checkoutType: "lead_pack",
+    customerEmail: emailCanon,
+    customerPhoneDigits,
+    amountTotalCents: s.amount_total,
+    currency: s.currency || null,
+    lineItems: [campaign ? `Neighborhood promotion (${campaign})` : "Neighborhood lead pack"],
+    leadServiceLine: s.metadata?.serviceLine ?? null,
+    leadTier: s.metadata?.leadTier ?? null,
+    requestedLeads: Number.isFinite(rlNum) ? rlNum : null,
+    targetingSummary:
+      [s.metadata?.city, s.metadata?.county, s.metadata?.zip].filter(Boolean).join(", ") || null,
+  });
+  fulfillLeadPackFromSession(s);
+  const token = await signDashboardToken(emailCanon);
+  return { token, email: emailCanon };
+}
+
+const setClientPasswordBody = z.object({
+  sessionId: z.string().min(10),
+  password: z.string().min(8).max(200),
+});
+
+/** After lead-pack checkout: set password using Stripe session proof, sync purchase + fulfillment, return dashboard JWT. */
+app.post("/api/auth/set-client-password", checkoutLimit, async (req: Request, res: Response) => {
+  const parsed = setClientPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const sk = process.env.STRIPE_SECRET_KEY;
+  if (!sk) {
+    res.status(503).json({ error: "stripe not configured" });
+    return;
+  }
+  const stripe = new Stripe(sk);
+  let s: Stripe.Checkout.Session;
+  try {
+    s = await stripe.checkout.sessions.retrieve(parsed.data.sessionId);
+  } catch (err) {
+    console.error("[set-client-password] retrieve", err);
+    res.status(400).json({ error: "invalid_session" });
+    return;
+  }
+  if (s.payment_status !== "paid") {
+    res.status(400).json({ error: "payment not complete" });
+    return;
+  }
+  if (s.metadata?.checkoutType !== "lead_pack") {
+    res.status(400).json({
+      error: "not_lead_pack",
+      message: "Account passwords apply to lead-pack purchases only.",
+    });
+    return;
+  }
+  const email = canonicalCheckoutEmail(s);
+  if (!email) {
+    res.status(400).json({ error: "no_email_on_session", message: "No email on this checkout session." });
+    return;
+  }
+  try {
+    const { passwordHash, salt } = await hashPassword(parsed.data.password);
+    await upsertClientPassword(email, passwordHash, salt);
+    const out = await finalizeLeadPackDashboardClaim(s, email);
+    res.json(out);
+  } catch (err) {
+    console.error("[set-client-password]", err);
+    res.status(500).json({ error: "failed", message: "Could not save password." });
+  }
+});
+
 const claimBody = z.object({
   sessionId: z.string().min(10),
   email: z.string().email(),
   phone: z.string().min(7),
+});
+
+const claimIdentityBody = z.object({
+  email: z.string().email(),
+  phone: z.string().min(7),
+});
+
+/** Sign in with email + phone only — looks up stored purchases (Firestore/local) then verifies Stripe session. */
+app.post("/api/auth/claim-leads-identity", checkoutLimit, async (req: Request, res: Response) => {
+  const parsed = claimIdentityBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const sk = process.env.STRIPE_SECRET_KEY;
+  if (!sk) {
+    res.status(503).json({ error: "stripe not configured" });
+    return;
+  }
+  const phoneDigits = normalizePhoneDigits(parsed.data.phone);
+  if (phoneDigits.length < 10) {
+    res.status(400).json({ error: "invalid_phone", message: "Phone must include at least 10 digits." });
+    return;
+  }
+  const stripe = new Stripe(sk);
+  const emailRaw = parsed.data.email;
+  const sessionIds = await listLeadPackSessionIdsForEmail(emailRaw);
+  let matched: Stripe.Checkout.Session | null = null;
+  for (const sid of sessionIds.slice(0, 25)) {
+    try {
+      const s = await stripe.checkout.sessions.retrieve(sid);
+      if (s.payment_status !== "paid") continue;
+      if (s.metadata?.checkoutType !== "lead_pack") continue;
+      if (!emailMatchesSession(s, emailRaw)) continue;
+      const metaPhone = s.metadata?.customerPhone?.trim() ?? "";
+      if (normalizePhoneDigits(metaPhone).length < 10) continue;
+      if (!phonesMatch(metaPhone, parsed.data.phone)) continue;
+      matched = s;
+      break;
+    } catch (err) {
+      console.error("[claim-leads-identity] retrieve", sid, err);
+    }
+  }
+  if (!matched) {
+    res.status(404).json({
+      error: "no_match",
+      message:
+        "No paid lead order found for this email and phone. Use the same details as at checkout. If you just paid, wait a moment for your receipt to process, then try again.",
+    });
+    return;
+  }
+  try {
+    const out = await finalizeLeadPackDashboardClaim(matched, emailRaw);
+    res.json(out);
+  } catch (err) {
+    console.error("[claim-leads-identity] finalize", err);
+    res.status(500).json({ error: "claim_failed", message: "Could not complete sign-in." });
+  }
 });
 
 app.post("/api/auth/claim-leads", generalLimit, async (req: Request, res: Response) => {
@@ -496,30 +666,8 @@ app.post("/api/auth/claim-leads", generalLimit, async (req: Request, res: Respon
       return;
     }
   }
-  const emailCanon = parsed.data.email.trim().toLowerCase();
-  // Always attach the verified claim email to this session so /api/my/purchases matches the JWT
-  // (webhook may have stored null email or a different Stripe-normalized value).
-  const orderNumber = orderNumberFromSessionId(s.id);
-  const rlRaw = s.metadata?.requestedLeads || s.metadata?.packSize;
-  const rlNum = rlRaw ? Number.parseInt(String(rlRaw), 10) : NaN;
-  const campaign = s.metadata?.campaignType ? String(s.metadata.campaignType) : "";
-  await markPurchaseNotification(s.id, {
-    orderNumber,
-    notifiedAt: new Date().toISOString(),
-    checkoutType: "lead_pack",
-    customerEmail: emailCanon,
-    amountTotalCents: s.amount_total,
-    currency: s.currency || null,
-    lineItems: [campaign ? `Neighborhood promotion (${campaign})` : "Neighborhood lead pack"],
-    leadServiceLine: s.metadata?.serviceLine ?? null,
-    leadTier: s.metadata?.leadTier ?? null,
-    requestedLeads: Number.isFinite(rlNum) ? rlNum : null,
-    targetingSummary:
-      [s.metadata?.city, s.metadata?.county, s.metadata?.zip].filter(Boolean).join(", ") || null,
-  });
-  fulfillLeadPackFromSession(s);
-  const token = await signDashboardToken(emailCanon);
-  res.json({ token, email: emailCanon });
+  const out = await finalizeLeadPackDashboardClaim(s, parsed.data.email);
+  res.json(out);
 });
 
 app.get("/api/my/leads", generalLimit, async (req: Request, res: Response) => {
@@ -550,7 +698,14 @@ app.get("/api/my/purchases", generalLimit, async (req: Request, res: Response) =
     return;
   }
   const purchases = await listPurchasesForEmail(email);
-  res.json({ email, purchases });
+  res.json({
+    email,
+    purchases: purchases.map((p) => ({
+      ...p,
+      paymentStatus: "Paid" as const,
+      orderStatus: "Confirmed" as const,
+    })),
+  });
 });
 
 app.get("/api/my/leads/export", generalLimit, async (req: Request, res: Response) => {

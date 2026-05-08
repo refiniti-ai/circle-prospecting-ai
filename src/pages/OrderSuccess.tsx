@@ -6,7 +6,7 @@ import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { apiBase } from "../lib/apiBase";
 import { clearPendingCheckoutSessionId, rememberCheckoutSessionId } from "../lib/checkoutSessionBridge";
-import { claimLeadSession } from "../lib/leadsApi";
+import { setClientPasswordFromSession } from "../lib/leadsApi";
 
 const TOKEN_KEY = "cpai_dash_jwt";
 
@@ -27,10 +27,10 @@ export function OrderSuccess() {
   const sessionId = sp.get("session_id");
   const [info, setInfo] = useState<CheckoutConfirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [signInErr, setSignInErr] = useState<string | null>(null);
-  const [signInBusy, setSignInBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+  const [pwErr, setPwErr] = useState<string | null>(null);
+  const [pwBusy, setPwBusy] = useState(false);
 
   useEffect(() => {
     if (sessionId) rememberCheckoutSessionId(sessionId);
@@ -47,7 +47,6 @@ export function OrderSuccess() {
       .then((data) => {
         setInfo(data);
         setError(null);
-        if (data.customerEmail) setEmail((prev) => (prev.trim() ? prev : data.customerEmail!));
       })
       .catch((e: unknown) => {
         if (e instanceof Error && e.name === "AbortError") return;
@@ -61,31 +60,30 @@ export function OrderSuccess() {
       ? null
       : (info.amountTotalCents / 100).toLocaleString("en-US", { style: "currency", currency: (info.currency || "usd").toUpperCase() });
 
-  const showLeadSignIn = Boolean(sessionId && (!info || info.checkoutType === "lead_pack"));
+  const showLeadPasswordSetup = Boolean(sessionId && (!info || info.checkoutType === "lead_pack"));
 
-  async function onSignIn(e: React.FormEvent) {
+  async function onCreatePassword(e: React.FormEvent) {
     e.preventDefault();
     if (!sessionId) return;
-    setSignInErr(null);
-    const digits = phone.replace(/\D/g, "");
-    if (!email.includes("@")) {
-      setSignInErr("Enter the email you used before checkout.");
+    setPwErr(null);
+    if (password.length < 8) {
+      setPwErr("Use at least 8 characters for your password.");
       return;
     }
-    if (digits.length < 10) {
-      setSignInErr("Enter the phone number you used before checkout (at least 10 digits).");
+    if (password !== password2) {
+      setPwErr("Passwords do not match.");
       return;
     }
-    setSignInBusy(true);
+    setPwBusy(true);
     try {
-      const r = await claimLeadSession(sessionId, email.trim(), phone.trim());
+      const r = await setClientPasswordFromSession(sessionId, password);
       localStorage.setItem(TOKEN_KEY, r.token);
       clearPendingCheckoutSessionId();
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setSignInErr(err instanceof Error ? err.message : "Could not sign in.");
+      setPwErr(err instanceof Error ? err.message : "Could not save password.");
     } finally {
-      setSignInBusy(false);
+      setPwBusy(false);
     }
   }
 
@@ -122,6 +120,16 @@ export function OrderSuccess() {
                 </a>
                 .
               </p>
+
+              <div style={{ marginTop: "1.25rem", display: "flex", flexWrap: "wrap", gap: "0.65rem", alignItems: "center" }}>
+                <Link to="/login" className="btn btn-primary">
+                  Log in
+                </Link>
+                <Link to="/" className="btn btn-ghost">
+                  Back to home
+                </Link>
+              </div>
+
               {info ? (
                 <details className="section-surface" style={{ marginTop: "1rem", textAlign: "left" }}>
                   <summary style={{ cursor: "pointer", fontWeight: 600, color: "var(--muted)" }}>Receipt details</summary>
@@ -151,60 +159,57 @@ export function OrderSuccess() {
               ) : null}
               {error ? <p className="cp-alert cp-alert--warn">{error}</p> : null}
 
-              {showLeadSignIn ? (
+              {showLeadPasswordSetup ? (
                 <div className="section-surface" style={{ marginTop: "1.5rem", textAlign: "left" }}>
-                  <h2 className="page-h1" style={{ fontSize: "1.25rem", marginBottom: "0.75rem" }}>
-                    Log in
+                  <h2 className="page-h1" style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>
+                    Create your dashboard password
                   </h2>
-                  <form onSubmit={onSignIn} style={{ display: "grid", gap: "1rem" }}>
+                  <p className="muted" style={{ margin: "0 0 1rem", fontSize: "0.9rem", lineHeight: 1.5 }}>
+                    Choose a password you will use on the <strong>Log in</strong> page (with your email) to open your
+                    dashboard from any device.
+                  </p>
+                  <form onSubmit={onCreatePassword} style={{ display: "grid", gap: "1rem" }}>
                     <label className="cp-form-grid">
-                      <span className="muted-label">Email</span>
+                      <span className="muted-label">Password</span>
                       <input
-                        type="email"
+                        type="password"
                         className="premium-input"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        autoComplete="email"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        autoComplete="new-password"
+                        minLength={8}
                         required
                       />
                     </label>
                     <label className="cp-form-grid">
-                      <span className="muted-label">Phone</span>
+                      <span className="muted-label">Confirm password</span>
                       <input
-                        type="tel"
+                        type="password"
                         className="premium-input"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Mobile number"
-                        autoComplete="tel"
+                        value={password2}
+                        onChange={(e) => setPassword2(e.target.value)}
+                        placeholder="Repeat password"
+                        autoComplete="new-password"
+                        minLength={8}
                         required
                       />
                     </label>
-                    {signInErr ? <p className="cp-alert cp-alert--error">{signInErr}</p> : null}
-                    <button type="submit" className="btn btn-primary" disabled={signInBusy}>
-                      {signInBusy ? "Signing in…" : "Log in & open dashboard"}
+                    {pwErr ? <p className="cp-alert cp-alert--error">{pwErr}</p> : null}
+                    <button type="submit" className="btn btn-primary" disabled={pwBusy}>
+                      {pwBusy ? "Saving…" : "Save password & open dashboard"}
                     </button>
                   </form>
                 </div>
               ) : null}
 
-              {sessionId && info && info.checkoutType !== "lead_pack" ? (
-                <p style={{ marginTop: "1.75rem" }}>
-                  <Link to="/" className="btn btn-primary">
-                    Back to home
-                  </Link>
-                </p>
-              ) : null}
-
               {!sessionId ? (
                 <p style={{ marginTop: "1.75rem" }}>
-                  <Link to="/" className="btn btn-primary">
-                    Back to home
+                  <Link to="/login" className="btn btn-primary">
+                    Log in
                   </Link>
                 </p>
               ) : null}
-
             </div>
           </div>
         </main>

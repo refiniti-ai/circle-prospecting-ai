@@ -3,12 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
-import {
-  clearPendingCheckoutSessionId,
-  readPendingCheckoutSessionId,
-  rememberCheckoutSessionId,
-} from "../lib/checkoutSessionBridge";
-import { claimLeadSession, fetchAdminSummary, loginAdmin } from "../lib/leadsApi";
+import { clientLogin, fetchAdminSummary, loginAdmin } from "../lib/leadsApi";
 
 const TOKEN_KEY = "cpai_dash_jwt";
 /** Session JWT after admin username/password (not the legacy API key). */
@@ -21,9 +16,8 @@ export function LoginPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab: Tab = searchParams.get("tab") === "admin" ? "admin" : "client";
 
-  const [sessionId, setSessionId] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [clientErr, setClientErr] = useState<string | null>(null);
   const [clientBusy, setClientBusy] = useState(false);
 
@@ -32,17 +26,6 @@ export function LoginPage() {
   const [adminErr, setAdminErr] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminBoot, setAdminBoot] = useState(true);
-
-  useEffect(() => {
-    const fromUrl = searchParams.get("session_id")?.trim();
-    if (fromUrl && fromUrl.length >= 10) {
-      setSessionId(fromUrl);
-      rememberCheckoutSessionId(fromUrl);
-      return;
-    }
-    const stored = readPendingCheckoutSessionId();
-    if (stored) setSessionId(stored);
-  }, [searchParams]);
 
   useEffect(() => {
     if (tab !== "admin") {
@@ -70,39 +53,25 @@ export function LoginPage() {
 
   function setTab(next: Tab) {
     const p = new URLSearchParams();
-    if (next === "admin") {
-      p.set("tab", "admin");
-    } else {
-      const sid = searchParams.get("session_id");
-      if (sid) p.set("session_id", sid);
-    }
+    if (next === "admin") p.set("tab", "admin");
     setSearchParams(p, { replace: true });
   }
 
   async function onClientSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const id = sessionId.trim();
-    if (id.length < 10) {
-      setClientErr(
-        "No recent checkout found on this browser. Finish payment and use the thank-you page first, or open the link from your receipt email—then return here with the same email and phone."
-      );
-      return;
-    }
     setClientErr(null);
-    const digits = phone.replace(/\D/g, "");
     if (!email.includes("@")) {
       setClientErr("Enter your email.");
       return;
     }
-    if (digits.length < 10) {
-      setClientErr("Enter your phone number (at least 10 digits).");
+    if (!password) {
+      setClientErr("Enter your password.");
       return;
     }
     setClientBusy(true);
     try {
-      const r = await claimLeadSession(id, email.trim(), phone.trim());
+      const r = await clientLogin(email.trim(), password);
       localStorage.setItem(TOKEN_KEY, r.token);
-      clearPendingCheckoutSessionId();
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setClientErr(err instanceof Error ? err.message : "Could not sign in.");
@@ -186,8 +155,8 @@ export function LoginPage() {
                   style={{ padding: "1.25rem", display: "grid", gap: "1rem", marginTop: "0.75rem" }}
                 >
                   <p className="muted" style={{ margin: 0, fontSize: "0.9rem", lineHeight: 1.5 }}>
-                    Use the same email and phone you entered before Stripe checkout. If you paid on this device, your
-                    order is remembered automatically after the thank-you page.
+                    Use the email and password you created on the thank-you page right after you paid. You do not need
+                    a checkout link to sign in here.
                   </p>
                   <label className="cp-form-grid">
                     <span className="muted-label">Email</span>
@@ -201,20 +170,24 @@ export function LoginPage() {
                     />
                   </label>
                   <label className="cp-form-grid">
-                    <span className="muted-label">Phone</span>
+                    <span className="muted-label">Password</span>
                     <input
-                      type="tel"
+                      type="password"
                       className="premium-input"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Mobile number"
-                      autoComplete="tel"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Your password"
+                      autoComplete="current-password"
                     />
                   </label>
                   {clientErr ? <p className="cp-alert cp-alert--error">{clientErr}</p> : null}
                   <button type="submit" className="btn btn-primary" disabled={clientBusy}>
                     {clientBusy ? "Signing in…" : "Open my dashboard"}
                   </button>
+                  <p className="muted" style={{ margin: 0, fontSize: "0.82rem", lineHeight: 1.45 }}>
+                    Forgot your password? Open the thank-you link from your Stripe receipt (you can set a new password
+                    there), or contact support.
+                  </p>
                 </form>
                 <div style={{ marginTop: "1rem", display: "grid", gap: "0.5rem", fontSize: "0.92rem" }}>
                   <Link to="/dashboard" className="link-btn" style={{ width: "fit-content" }}>

@@ -72,6 +72,127 @@ export async function fetchLeadCount(request: LeadCountRequest, signal?: AbortSi
   };
 }
 
+export async function clientLogin(email: string, password: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/client-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error(
+        "Could not reach the API (network or CORS). Redeploy Cloud Run after CORS updates, or confirm /api/health on your API returns JSON."
+      );
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Client login");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "invalid_credentials") msg = "Invalid email or password.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not sign in");
+  }
+  return (await r.json()) as { token: string; email: string };
+}
+
+export async function setClientPasswordFromSession(sessionId: string, password: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/set-client-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ sessionId: sessionId.trim(), password }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error(
+        "Could not reach the API (network or CORS). Redeploy Cloud Run after CORS updates, or confirm /api/health on your API returns JSON."
+      );
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Set client password");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "stripe not configured") msg = "Payment system is not configured on the server.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not save password");
+  }
+  return (await r.json()) as { token: string; email: string };
+}
+
+export type LeadClaimError = Error & { code?: string };
+
+/** True when the server had no stored purchase matching email + phone (try session-id claim if available). */
+export function isLeadClaimNoMatchError(err: unknown): err is LeadClaimError {
+  return err instanceof Error && (err as LeadClaimError).code === "no_match";
+}
+
+/** Dashboard sign-in using only email + phone (purchase must already be in server storage, usually via webhook). */
+export async function claimLeadPackByEmailPhone(email: string, phone: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/claim-leads-identity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ email: email.trim(), phone: phone.trim() }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (
+      !raw ||
+      raw === "Failed to fetch" ||
+      raw.includes("NetworkError") ||
+      raw.includes("Load failed")
+    ) {
+      throw new Error(
+        "Could not reach the API (network or CORS). Redeploy Cloud Run after CORS updates, or confirm /api/health on your API returns JSON."
+      );
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Claim by identity");
+  if (!r.ok) {
+    const raw = await r.text();
+    let msg = raw;
+    let errField: string | undefined;
+    try {
+      const j = JSON.parse(raw) as { message?: string; error?: string };
+      errField = j.error;
+      if (j.message) msg = j.message;
+      else if (j.error === "stripe not configured") msg = "Payment system is not configured on the server.";
+      else if (j.error === "invalid_phone") msg = j.message || "Phone must include at least 10 digits.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    if (r.status === 404 && errField === "no_match") {
+      const e = new Error(msg || "No matching order found") as LeadClaimError;
+      e.code = "no_match";
+      throw e;
+    }
+    throw new Error(msg || "Could not sign in");
+  }
+  return (await r.json()) as { token: string; email: string };
+}
+
 export async function claimLeadSession(sessionId: string, email: string, phone: string) {
   let r: Response;
   try {
@@ -186,6 +307,9 @@ export type MyPurchaseRow = {
   leadTier?: string | null;
   requestedLeads?: number | null;
   targetingSummary?: string | null;
+  /** Server-computed label for completed checkouts in this app */
+  paymentStatus?: string;
+  orderStatus?: string;
 };
 
 export async function fetchMyPurchases(token: string) {

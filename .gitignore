@@ -12,6 +12,7 @@ temp-ref-*.jpg
 server/data/inventory.json
 server/data/orders.json
 server/data/purchase-confirmations.json
+server/data/client-accounts.json
 # Firebase Admin private keys — never commit
 secrets/
 *firebase-adminsdk*.json

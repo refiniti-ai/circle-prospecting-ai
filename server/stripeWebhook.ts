@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import Stripe from "stripe";
 import { fulfillLeadPackFromSession } from "./leadFulfillment.js";
 import { buildAdminPurchaseEmail, buildCustomerPurchaseEmail, sendTextEmail } from "./mailer.js";
+import { normalizePhoneDigits } from "./checkoutIdentity.js";
 import { hasPurchaseNotification, markPurchaseNotification, orderNumberFromSessionId } from "./purchaseConfirmStore.js";
 
 function listLineItems(session: Stripe.Checkout.Session): string[] {
@@ -108,11 +109,14 @@ export function createStripeWebhookHandler() {
 
           const rlRaw = s.metadata?.requestedLeads || s.metadata?.packSize;
           const rlNum = rlRaw ? Number.parseInt(String(rlRaw), 10) : NaN;
+          const pd = normalizePhoneDigits(String(s.metadata?.customerPhone || ""));
+          const customerPhoneDigits = pd.length >= 10 ? pd.slice(-10) : null;
           await markPurchaseNotification(s.id, {
             orderNumber,
             notifiedAt: new Date().toISOString(),
             checkoutType: s.metadata?.checkoutType || "general",
             customerEmail: customerEmail || null,
+            customerPhoneDigits,
             amountTotalCents: s.amount_total,
             currency: s.currency || null,
             lineItems,
