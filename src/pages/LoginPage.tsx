@@ -3,10 +3,16 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
-import { claimLeadSession, fetchAdminSummary } from "../lib/leadsApi";
+import {
+  clearPendingCheckoutSessionId,
+  readPendingCheckoutSessionId,
+  rememberCheckoutSessionId,
+} from "../lib/checkoutSessionBridge";
+import { claimLeadSession, fetchAdminSummary, loginAdmin } from "../lib/leadsApi";
 
 const TOKEN_KEY = "cpai_dash_jwt";
-const ADMIN_KEY = "cpai_admin_key";
+/** Session JWT after admin username/password (not the legacy API key). */
+const ADMIN_SESSION_KEY = "cpai_admin_jwt";
 
 type Tab = "client" | "admin";
 
@@ -21,14 +27,21 @@ export function LoginPage() {
   const [clientErr, setClientErr] = useState<string | null>(null);
   const [clientBusy, setClientBusy] = useState(false);
 
-  const [adminKeyInput, setAdminKeyInput] = useState("");
+  const [adminUser, setAdminUser] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [adminErr, setAdminErr] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminBoot, setAdminBoot] = useState(true);
 
   useEffect(() => {
     const fromUrl = searchParams.get("session_id")?.trim();
-    if (fromUrl) setSessionId(fromUrl);
+    if (fromUrl && fromUrl.length >= 10) {
+      setSessionId(fromUrl);
+      rememberCheckoutSessionId(fromUrl);
+      return;
+    }
+    const stored = readPendingCheckoutSessionId();
+    if (stored) setSessionId(stored);
   }, [searchParams]);
 
   useEffect(() => {
@@ -36,7 +49,7 @@ export function LoginPage() {
       setAdminBoot(false);
       return;
     }
-    const saved = sessionStorage.getItem(ADMIN_KEY);
+    const saved = sessionStorage.getItem(ADMIN_SESSION_KEY) ?? sessionStorage.getItem("cpai_admin_key");
     if (!saved) {
       setAdminBoot(false);
       return;
@@ -45,8 +58,9 @@ export function LoginPage() {
     fetchAdminSummary(saved)
       .then(() => navigate("/admin", { replace: true }))
       .catch(() => {
-        sessionStorage.removeItem(ADMIN_KEY);
-        setAdminKeyInput("");
+        sessionStorage.removeItem(ADMIN_SESSION_KEY);
+        sessionStorage.removeItem("cpai_admin_key");
+        setAdminPassword("");
       })
       .finally(() => {
         setAdminBusy(false);
@@ -55,13 +69,12 @@ export function LoginPage() {
   }, [tab, navigate]);
 
   function setTab(next: Tab) {
-    const sid = searchParams.get("session_id");
     const p = new URLSearchParams();
     if (next === "admin") {
       p.set("tab", "admin");
+    } else {
+      const sid = searchParams.get("session_id");
       if (sid) p.set("session_id", sid);
-    } else if (sid) {
-      p.set("session_id", sid);
     }
     setSearchParams(p, { replace: true });
   }
@@ -69,7 +82,12 @@ export function LoginPage() {
   async function onClientSubmit(e: React.FormEvent) {
     e.preventDefault();
     const id = sessionId.trim();
-    if (id.length < 10) return;
+    if (id.length < 10) {
+      setClientErr(
+        "No recent checkout found on this browser. Finish payment and use the thank-you page first, or open the link from your receipt email—then return here with the same email and phone."
+      );
+      return;
+    }
     setClientErr(null);
     const digits = phone.replace(/\D/g, "");
     if (!email.includes("@")) {
@@ -84,6 +102,7 @@ export function LoginPage() {
     try {
       const r = await claimLeadSession(id, email.trim(), phone.trim());
       localStorage.setItem(TOKEN_KEY, r.token);
+      clearPendingCheckoutSessionId();
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setClientErr(err instanceof Error ? err.message : "Could not sign in.");
@@ -95,18 +114,25 @@ export function LoginPage() {
   async function onAdminSubmit(e: React.FormEvent) {
     e.preventDefault();
     setAdminErr(null);
-    const k = adminKeyInput.trim();
-    if (!k) {
-      setAdminErr("Enter the admin API key (same as server ADMIN_API_KEY).");
+    const u = adminUser.trim();
+    if (!u) {
+      setAdminErr("Enter your username.");
+      return;
+    }
+    if (!adminPassword) {
+      setAdminErr("Enter your password.");
       return;
     }
     setAdminBusy(true);
     try {
-      await fetchAdminSummary(k);
-      sessionStorage.setItem(ADMIN_KEY, k);
+      const key = await loginAdmin(u, adminPassword);
+      await fetchAdminSummary(key);
+      sessionStorage.setItem(ADMIN_SESSION_KEY, key);
+      sessionStorage.removeItem("cpai_admin_key");
+      setAdminPassword("");
       navigate("/admin", { replace: true });
-    } catch {
-      setAdminErr("Invalid key or cannot reach the API. Check that the API is running and CORS allows this site.");
+    } catch (err) {
+      setAdminErr(err instanceof Error ? err.message : "Could not sign in.");
     } finally {
       setAdminBusy(false);
     }
@@ -129,10 +155,6 @@ export function LoginPage() {
                 <Link to="/">Home</Link> / Log in
               </p>
               <h1 className="page-h1">Log in</h1>
-              <p className="page-lead" style={{ maxWidth: "100%" }}>
-                <strong>Client</strong>: checkout session id, email, and phone from your order.{" "}
-                <strong>Admin</strong>: server <code className="cp-kbd">ADMIN_API_KEY</code>.
-              </p>
             </header>
 
             <div className="login-tab-bar" role="tablist" aria-label="Login type">
@@ -163,18 +185,10 @@ export function LoginPage() {
                   className="section-surface"
                   style={{ padding: "1.25rem", display: "grid", gap: "1rem", marginTop: "0.75rem" }}
                 >
-                  <label className="cp-form-grid">
-                    <span className="muted-label">Checkout session id (starts with cs_)</span>
-                    <input
-                      type="text"
-                      className="premium-input"
-                      value={sessionId}
-                      onChange={(e) => setSessionId(e.target.value)}
-                      placeholder="cs_test_… or cs_live_…"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                  </label>
+                  <p className="muted" style={{ margin: 0, fontSize: "0.9rem", lineHeight: 1.5 }}>
+                    Use the same email and phone you entered before Stripe checkout. If you paid on this device, your
+                    order is remembered automatically after the thank-you page.
+                  </p>
                   <label className="cp-form-grid">
                     <span className="muted-label">Email</span>
                     <input
@@ -182,15 +196,23 @@ export function LoginPage() {
                       className="premium-input"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
                       autoComplete="email"
                     />
                   </label>
                   <label className="cp-form-grid">
                     <span className="muted-label">Phone</span>
-                    <input type="tel" className="premium-input" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+                    <input
+                      type="tel"
+                      className="premium-input"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="Mobile number"
+                      autoComplete="tel"
+                    />
                   </label>
                   {clientErr ? <p className="cp-alert cp-alert--error">{clientErr}</p> : null}
-                  <button type="submit" className="btn btn-primary" disabled={clientBusy || sessionId.trim().length < 10}>
+                  <button type="submit" className="btn btn-primary" disabled={clientBusy}>
                     {clientBusy ? "Signing in…" : "Open my dashboard"}
                   </button>
                 </form>
@@ -217,19 +239,34 @@ export function LoginPage() {
                     className="section-surface"
                     style={{ padding: "1.25rem", display: "grid", gap: "1rem", marginTop: "0.75rem" }}
                   >
-                    <p className="muted" style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.45 }}>
-                      Key is stored only in this browser tab (<code className="cp-kbd">sessionStorage</code>). It must match{" "}
-                      <code className="cp-kbd">ADMIN_API_KEY</code> on your API.
+                    <p className="muted" style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.5 }}>
+                      <strong>Sample (change in production):</strong> username <code className="cp-kbd">admin</code>, password{" "}
+                      <code className="cp-kbd">changeme</code>. On the server set{" "}
+                      <code className="cp-kbd">ADMIN_USERNAME</code>, <code className="cp-kbd">ADMIN_PASSWORD</code>, and{" "}
+                      <code className="cp-kbd">DASHBOARD_JWT_SECRET</code> (32+ random characters). You do not need an admin
+                      API key for this screen.
                     </p>
                     <label className="cp-form-grid">
-                      <span className="muted-label">Admin API key</span>
+                      <span className="muted-label">Username</span>
+                      <input
+                        type="text"
+                        className="premium-input"
+                        autoComplete="username"
+                        value={adminUser}
+                        onChange={(e) => setAdminUser(e.target.value)}
+                        placeholder="admin"
+                        disabled={adminBusy}
+                      />
+                    </label>
+                    <label className="cp-form-grid">
+                      <span className="muted-label">Password</span>
                       <input
                         type="password"
                         className="premium-input"
-                        autoComplete="off"
-                        value={adminKeyInput}
-                        onChange={(e) => setAdminKeyInput(e.target.value)}
-                        placeholder="Paste ADMIN_API_KEY"
+                        autoComplete="current-password"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="••••••••"
                         disabled={adminBusy}
                       />
                     </label>

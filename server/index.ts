@@ -22,7 +22,7 @@ import {
   type LeadTierId,
 } from "../src/lib/leadPricing.ts";
 import { getSummary, upsertLeadsFromRows, getLeadsForEmail, estimateLeadCount } from "./leadStore.js";
-import { signDashboardToken, verifyDashboardToken } from "./dashboardAuth.js";
+import { signAdminToken, signDashboardToken, verifyAdminToken, verifyDashboardToken } from "./dashboardAuth.js";
 import { fulfillLeadPackFromSession } from "./leadFulfillment.js";
 import { emailMatchesSession, normalizePhoneDigits, phonesMatch } from "./checkoutIdentity.js";
 import { createStripeWebhookHandler } from "./stripeWebhook.js";
@@ -221,19 +221,73 @@ app.get("/api/pricing", generalLimit, (_req: Request, res: Response) => {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } });
 
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const key = process.env.ADMIN_API_KEY;
-  if (!key) {
-    res.status(503).json({ error: "ADMIN_API_KEY not set" });
-    return;
+function timingSafeStringEq(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a, "utf8");
+    const bb = Buffer.from(b, "utf8");
+    if (ba.length !== bb.length) return false;
+    return crypto.timingSafeEqual(ba, bb);
+  } catch {
+    return false;
   }
+}
+
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const h = req.get("Authorization");
-  if (h !== `Bearer ${key}`) {
+  if (!h?.startsWith("Bearer ")) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
-  next();
+  const tok = h.slice(7).trim();
+  if (await verifyAdminToken(tok)) {
+    next();
+    return;
+  }
+  const legacy = process.env.ADMIN_API_KEY?.trim();
+  if (legacy && timingSafeStringEq(tok, legacy)) {
+    next();
+    return;
+  }
+  res.status(401).json({ error: "unauthorized" });
 }
+
+const adminLoginBody = z.object({
+  username: z.string().min(1).max(128),
+  password: z.string().min(1).max(256),
+});
+
+/** Username + password → short-lived JWT for /api/admin/* (no ADMIN_API_KEY needed in the browser). */
+app.post("/api/auth/admin-login", generalLimit, async (req: Request, res: Response) => {
+  const parsed = adminLoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const adminUser = (process.env.ADMIN_USERNAME || "admin").trim();
+  const adminPass = process.env.ADMIN_PASSWORD?.trim();
+  if (!adminPass) {
+    res.status(503).json({
+      error: "admin_login_not_configured",
+      message: "Set ADMIN_PASSWORD on the server. Use DASHBOARD_JWT_SECRET (32+ chars in production) to sign admin sessions.",
+    });
+    return;
+  }
+  const { username, password } = parsed.data;
+  if (username.trim() !== adminUser || !timingSafeStringEq(password, adminPass)) {
+    res.status(401).json({ error: "invalid_credentials", message: "Invalid username or password." });
+    return;
+  }
+  try {
+    const token = await signAdminToken();
+    res.json({ token });
+  } catch (e) {
+    console.error("admin-login sign", e);
+    res.status(503).json({
+      error: "admin_token_unavailable",
+      message: "Set DASHBOARD_JWT_SECRET (32+ random characters in production).",
+    });
+  }
+});
 
 const leadCountBody = z.object({
   city: z.string().optional(),

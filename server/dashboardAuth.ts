@@ -31,3 +31,22 @@ export async function verifyDashboardToken(token: string): Promise<string | null
     return null;
   }
 }
+
+/** Short-lived token after /api/auth/admin-login (username + password). */
+export async function signAdminToken(): Promise<string> {
+  return new SignJWT({ typ: "admin" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject("admin")
+    .setIssuedAt()
+    .setExpirationTime("8h")
+    .sign(getSecret());
+}
+
+export async function verifyAdminToken(token: string): Promise<boolean> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret());
+    return (payload as { typ?: string }).typ === "admin";
+  } catch {
+    return false;
+  }
+}

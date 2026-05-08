@@ -1,6 +1,6 @@
 # Express API for Firebase Hosting → Cloud Run (same domain: /api/** rewrites).
 # Build: docker build -t circle-prospecting-api .
-# Cloud Run: set env APP_PUBLIC_URL, STRIPE_*, DASHBOARD_JWT_SECRET, ADMIN_API_KEY, etc.
+# Cloud Run: set env APP_PUBLIC_URL, STRIPE_*, DASHBOARD_JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD, etc.
 FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production

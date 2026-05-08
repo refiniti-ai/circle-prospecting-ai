@@ -5,6 +5,7 @@ import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { apiBase } from "../lib/apiBase";
+import { clearPendingCheckoutSessionId, rememberCheckoutSessionId } from "../lib/checkoutSessionBridge";
 import { claimLeadSession } from "../lib/leadsApi";
 
 const TOKEN_KEY = "cpai_dash_jwt";
@@ -30,6 +31,10 @@ export function OrderSuccess() {
   const [phone, setPhone] = useState("");
   const [signInErr, setSignInErr] = useState<string | null>(null);
   const [signInBusy, setSignInBusy] = useState(false);
+
+  useEffect(() => {
+    if (sessionId) rememberCheckoutSessionId(sessionId);
+  }, [sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -75,6 +80,7 @@ export function OrderSuccess() {
     try {
       const r = await claimLeadSession(sessionId, email.trim(), phone.trim());
       localStorage.setItem(TOKEN_KEY, r.token);
+      clearPendingCheckoutSessionId();
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setSignInErr(err instanceof Error ? err.message : "Could not sign in.");
@@ -158,6 +164,7 @@ export function OrderSuccess() {
                         className="premium-input"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
                         autoComplete="email"
                         required
                       />
@@ -169,6 +176,7 @@ export function OrderSuccess() {
                         className="premium-input"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
+                        placeholder="Mobile number"
                         autoComplete="tel"
                         required
                       />

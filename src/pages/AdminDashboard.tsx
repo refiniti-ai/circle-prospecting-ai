@@ -10,7 +10,8 @@ import {
   type AdminPurchaseRow,
 } from "../lib/leadsApi";
 
-const KEY = "cpai_admin_key";
+const KEY = "cpai_admin_jwt";
+const LEGACY_KEY = "cpai_admin_key";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -63,7 +64,7 @@ export function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem(KEY);
+    const saved = sessionStorage.getItem(KEY) ?? sessionStorage.getItem(LEGACY_KEY);
     if (!saved) {
       setAuthChecking(false);
       return;
@@ -72,15 +73,21 @@ export function AdminDashboard() {
       .then(() => {
         setActiveKey(saved);
         setAuthenticated(true);
+        if (sessionStorage.getItem(LEGACY_KEY) && !sessionStorage.getItem(KEY)) {
+          sessionStorage.setItem(KEY, saved);
+          sessionStorage.removeItem(LEGACY_KEY);
+        }
       })
       .catch(() => {
         sessionStorage.removeItem(KEY);
+        sessionStorage.removeItem(LEGACY_KEY);
       })
       .finally(() => setAuthChecking(false));
   }, [loadDashboard]);
 
   function logout() {
     sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem(LEGACY_KEY);
     setActiveKey(null);
     setAuthenticated(false);
     setSummary(null);

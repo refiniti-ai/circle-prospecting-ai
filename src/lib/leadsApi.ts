@@ -97,14 +97,57 @@ export async function claimLeadSession(sessionId: string, email: string, phone: 
   if (!r.ok) {
     let msg = await r.text();
     try {
-      const j = JSON.parse(msg) as { message?: string };
+      const j = JSON.parse(msg) as { message?: string; error?: string };
       if (j.message) msg = j.message;
+      else if (j.error === "stripe not configured") msg = "Payment system is not configured on the server.";
+      else if (j.error) msg = j.error;
     } catch {
       /* use raw */
     }
     throw new Error(msg || "Could not sign in");
   }
   return (await r.json()) as { token: string; email: string };
+}
+
+export async function loginAdmin(username: string, password: string): Promise<string> {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/admin-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ username: username.trim(), password }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error("Could not reach the API. Check your connection and try again.");
+    }
+    throw e;
+  }
+  const ct = r.headers.get("content-type") || "";
+  if (ct.includes("text/html")) {
+    throw new Error(
+      "Admin API returned a web page instead of JSON—usually the app is not reaching Cloud Run (redeploy the API with /api/auth/admin-login, or open /api/health on this site to verify). On Firebase Hosting, API calls must use same-origin /api (do not set VITE_API_BASE_URL for production builds to this host)."
+    );
+  }
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "invalid_credentials") msg = "Invalid username or password.";
+      else if (j.error === "admin_login_not_configured") msg = j.message || "Set ADMIN_PASSWORD (and DASHBOARD_JWT_SECRET) on the server.";
+      else if (j.error === "admin_token_unavailable") msg = j.message || "Server cannot sign admin sessions (check DASHBOARD_JWT_SECRET).";
+      else if (j.error) msg = j.message || j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Admin sign-in failed");
+  }
+  const j = (await r.json()) as { token?: string; apiKey?: string };
+  const cred = j.token ?? j.apiKey;
+  if (!cred) throw new Error("Invalid server response");
+  return cred;
 }
 
 export type PurchasedLead = {
