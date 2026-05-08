@@ -1,28 +1,28 @@
-/** Last-resort when VITE_API_BASE_URL was missing at build time but user is on Firebase Hosting. */
-const FIREBASE_HOSTING_API_FALLBACK = "https://circle-prospecting-ai-git-724527267367.us-central1.run.app";
+function isFirebaseHostingHost(hostname: string): boolean {
+  return (
+    hostname === "circle-prospecting-ai.web.app" ||
+    hostname === "circle-prospecting-ai.firebaseapp.com"
+  );
+}
 
+/**
+ * API origin for `fetch`.
+ * - Prefer `VITE_API_BASE_URL` when set (e.g. direct Cloud Run URL for tests).
+ * - On Firebase Hosting, use same-origin `""` so requests go to `/api/*` and Hosting proxies to Cloud Run (no cross-origin CORS).
+ */
 export function apiBase(): string {
-  const b = import.meta.env.VITE_API_BASE_URL;
+  const b = String(import.meta.env.VITE_API_BASE_URL ?? "").trim();
   if (b) return b.replace(/\/$/, "");
-  if (import.meta.env.PROD && typeof window !== "undefined") {
-    const h = window.location.hostname;
-    if (
-      h === "circle-prospecting-ai.web.app" ||
-      h === "circle-prospecting-ai.firebaseapp.com"
-    ) {
-      return FIREBASE_HOSTING_API_FALLBACK;
-    }
+  if (import.meta.env.PROD && typeof window !== "undefined" && isFirebaseHostingHost(window.location.hostname)) {
+    return "";
   }
   return "";
 }
 
-/** True when build includes a dedicated API origin (required on Firebase Hosting and other static hosts). */
+/** Whether the SPA can reach an API (same-origin rewrite or explicit base). */
 export function isApiBaseConfigured(): boolean {
   if (String(import.meta.env.VITE_API_BASE_URL ?? "").trim()) return true;
-  if (import.meta.env.PROD && typeof window !== "undefined") {
-    const h = window.location.hostname;
-    if (h === "circle-prospecting-ai.web.app" || h === "circle-prospecting-ai.firebaseapp.com")
-      return true;
-  }
+  if (import.meta.env.PROD && typeof window !== "undefined" && isFirebaseHostingHost(window.location.hostname))
+    return true;
   return false;
 }
