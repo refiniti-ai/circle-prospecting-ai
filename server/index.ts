@@ -30,7 +30,10 @@ import {
   normalizePhoneDigits,
   phonesMatch,
 } from "./checkoutIdentity.js";
+import { getStoredAdminAuth, upsertStoredAdminAuth } from "./adminAccountStore.js";
 import { getClientAccount, hashPassword, upsertClientPassword, verifyPassword } from "./clientAccountStore.js";
+import { sendTextEmail } from "./mailer.js";
+import { createPasswordResetToken, deletePasswordResetToken, takePasswordResetToken } from "./passwordResetStore.js";
 import { createStripeWebhookHandler } from "./stripeWebhook.js";
 import { processInboundNewListing } from "./newListingWorkflow.js";
 import {
@@ -110,6 +113,15 @@ app.use(
 const generalLimit = rateLimit({ windowMs: 60_000, max: 200, standardHeaders: "draft-7", legacyHeaders: false });
 const checkoutLimit = rateLimit({ windowMs: 60_000, max: 15, standardHeaders: "draft-7", legacyHeaders: false });
 const webhookLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: "draft-7", legacyHeaders: false });
+
+function publicSiteBase() {
+  return (process.env.APP_PUBLIC_URL || "http://localhost:5173").replace(/\/$/, "");
+}
+
+async function deliverPasswordResetEmail(to: string, subject: string, text: string): Promise<boolean> {
+  const r = await sendTextEmail(to, subject, text);
+  return r.mode !== "skipped";
+}
 
 const rawJson = express.raw({ type: "application/json", limit: "256kb" });
 
@@ -292,16 +304,27 @@ app.post("/api/auth/admin-login", generalLimit, async (req: Request, res: Respon
     return;
   }
   const adminUser = (process.env.ADMIN_USERNAME || "admin").trim();
-  const adminPass = process.env.ADMIN_PASSWORD?.trim();
-  if (!adminPass) {
+  const envPass = process.env.ADMIN_PASSWORD?.trim();
+  const stored = await getStoredAdminAuth();
+  if (!stored && !envPass) {
     res.status(503).json({
       error: "admin_login_not_configured",
-      message: "Set ADMIN_PASSWORD on the server. Use DASHBOARD_JWT_SECRET (32+ chars in production) to sign admin sessions.",
+      message: "Set ADMIN_PASSWORD on the server (and optionally ADMIN_USERNAME).",
     });
     return;
   }
   const { username, password } = parsed.data;
-  if (username.trim() !== adminUser || !timingSafeStringEq(password, adminPass)) {
+  if (username.trim() !== adminUser) {
+    res.status(401).json({ error: "invalid_credentials", message: "Invalid username or password." });
+    return;
+  }
+  let authed = false;
+  if (stored && stored.username === adminUser) {
+    authed = await verifyPassword(password, stored.salt, stored.passwordHash);
+  } else if (envPass) {
+    authed = timingSafeStringEq(password, envPass);
+  }
+  if (!authed) {
     res.status(401).json({ error: "invalid_credentials", message: "Invalid username or password." });
     return;
   }
@@ -310,10 +333,137 @@ app.post("/api/auth/admin-login", generalLimit, async (req: Request, res: Respon
     res.json({ token });
   } catch (e) {
     console.error("admin-login sign", e);
+    res.status(503).json({ error: "admin_token_unavailable", message: "Could not create admin session." });
+  }
+});
+
+const emailOnlyBody = z.object({ email: z.string().email() });
+const passwordResetCompleteBody = z.object({
+  token: z.string().min(16).max(512),
+  password: z.string().min(8).max(200),
+});
+
+app.post("/api/auth/client-password-reset-request", checkoutLimit, async (req: Request, res: Response) => {
+  const parsed = emailOnlyBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+  const acc = await getClientAccount(email);
+  if (!acc) {
+    res.json({ ok: true });
+    return;
+  }
+  const token = await createPasswordResetToken("client", email);
+  const link = `${publicSiteBase()}/login?client_reset=${encodeURIComponent(token)}`;
+  const text = `You asked to reset your dashboard password.\n\nOpen this link (valid 1 hour):\n${link}\n\nIf you did not request this, you can ignore this email.`;
+  const sent = await deliverPasswordResetEmail(
+    email,
+    "Reset your Circle Prospecting AI password",
+    text
+  );
+  if (!sent) {
+    await deletePasswordResetToken(token);
     res.status(503).json({
-      error: "admin_token_unavailable",
-      message: "Set DASHBOARD_JWT_SECRET (32+ random characters in production).",
+      error: "email_not_configured",
+      message:
+        "This server cannot send email yet. Set GHL_MAIL_WEBHOOK_URL or SMTP_* environment variables on Cloud Run.",
     });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/client-password-reset", checkoutLimit, async (req: Request, res: Response) => {
+  const parsed = passwordResetCompleteBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const payload = await takePasswordResetToken(parsed.data.token);
+  if (!payload || payload.kind !== "client") {
+    res.status(400).json({ error: "invalid_token", message: "This link is invalid or has expired. Request a new reset." });
+    return;
+  }
+  const acc = await getClientAccount(payload.email);
+  if (!acc) {
+    res.status(400).json({ error: "invalid_token", message: "This link is invalid or has expired." });
+    return;
+  }
+  try {
+    const { passwordHash, salt } = await hashPassword(parsed.data.password);
+    await upsertClientPassword(payload.email, passwordHash, salt);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[client-password-reset]", err);
+    res.status(500).json({ error: "failed", message: "Could not update password." });
+  }
+});
+
+app.post("/api/auth/admin-password-reset-request", checkoutLimit, async (req: Request, res: Response) => {
+  const parsed = emailOnlyBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (!adminEmail) {
+    res.status(503).json({
+      error: "admin_email_not_configured",
+      message: "Set ADMIN_EMAIL on the server to the address that should receive admin reset links.",
+    });
+    return;
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+  if (email !== adminEmail) {
+    res.json({ ok: true });
+    return;
+  }
+  const token = await createPasswordResetToken("admin", email);
+  const link = `${publicSiteBase()}/login?tab=admin&admin_reset=${encodeURIComponent(token)}`;
+  const text = `You asked to reset your admin password.\n\nOpen this link (valid 1 hour):\n${link}\n\nIf you did not request this, ignore this email.`;
+  const sent = await deliverPasswordResetEmail(
+    adminEmail,
+    "Reset your Circle Prospecting AI admin password",
+    text
+  );
+  if (!sent) {
+    await deletePasswordResetToken(token);
+    res.status(503).json({
+      error: "email_not_configured",
+      message:
+        "This server cannot send email yet. Set GHL_MAIL_WEBHOOK_URL or SMTP_* environment variables on Cloud Run.",
+    });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/admin-password-reset", checkoutLimit, async (req: Request, res: Response) => {
+  const parsed = passwordResetCompleteBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
+    return;
+  }
+  const payload = await takePasswordResetToken(parsed.data.token);
+  if (!payload || payload.kind !== "admin") {
+    res.status(400).json({ error: "invalid_token", message: "This link is invalid or has expired. Request a new reset." });
+    return;
+  }
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (!adminEmail || payload.email !== adminEmail) {
+    res.status(400).json({ error: "invalid_token", message: "This link is invalid or has expired." });
+    return;
+  }
+  const adminUser = (process.env.ADMIN_USERNAME || "admin").trim();
+  try {
+    const { passwordHash, salt } = await hashPassword(parsed.data.password);
+    await upsertStoredAdminAuth(adminUser, passwordHash, salt);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[admin-password-reset]", err);
+    res.status(500).json({ error: "failed", message: "Could not update password." });
   }
 });
 
@@ -764,7 +914,7 @@ const checkoutBody = z.object({
 });
 
 function getPublicBaseUrl() {
-  return (process.env.APP_PUBLIC_URL || "http://localhost:5173").replace(/\/$/, "");
+  return publicSiteBase();
 }
 
 app.post("/api/checkout", checkoutLimit, async (req: Request, res: Response) => {

@@ -105,6 +105,125 @@ export async function clientLogin(email: string, password: string) {
   return (await r.json()) as { token: string; email: string };
 }
 
+export async function requestClientPasswordReset(email: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/client-password-reset-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error("Could not reach the API.");
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Client password reset request");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "email_not_configured") msg = j.message || "Email is not configured on the server.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not send reset email");
+  }
+}
+
+export async function completeClientPasswordReset(token: string, password: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/client-password-reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ token: token.trim(), password }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error("Could not reach the API.");
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Client password reset");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not reset password");
+  }
+}
+
+export async function requestAdminPasswordReset(email: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/admin-password-reset-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error("Could not reach the API.");
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Admin password reset request");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "admin_email_not_configured") msg = j.message || "ADMIN_EMAIL is not set on the server.";
+      else if (j.error === "email_not_configured") msg = j.message || "Email is not configured on the server.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not send reset email");
+  }
+}
+
+export async function completeAdminPasswordReset(token: string, password: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/auth/admin-password-reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ token: token.trim(), password }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error("Could not reach the API.");
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Admin password reset");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not reset password");
+  }
+}
+
 export async function setClientPasswordFromSession(sessionId: string, password: string) {
   let r: Response;
   try {
@@ -257,8 +376,8 @@ export async function loginAdmin(username: string, password: string): Promise<st
       const j = JSON.parse(msg) as { message?: string; error?: string };
       if (j.message) msg = j.message;
       else if (j.error === "invalid_credentials") msg = "Invalid username or password.";
-      else if (j.error === "admin_login_not_configured") msg = j.message || "Set ADMIN_PASSWORD (and DASHBOARD_JWT_SECRET) on the server.";
-      else if (j.error === "admin_token_unavailable") msg = j.message || "Server cannot sign admin sessions (check DASHBOARD_JWT_SECRET).";
+      else if (j.error === "admin_login_not_configured") msg = j.message || "Set ADMIN_PASSWORD on the server.";
+      else if (j.error === "admin_token_unavailable") msg = j.message || "Server could not create an admin session.";
       else if (j.error) msg = j.message || j.error;
     } catch {
       /* use raw */
