@@ -130,30 +130,6 @@ export function AdminDashboard() {
     return purchases.reduce((acc, p) => acc + (p.amountTotalCents ?? 0), 0);
   }, [purchases]);
 
-  const showAdmin = import.meta.env.DEV || import.meta.env.VITE_SHOW_ADMIN === "1";
-
-  if (!showAdmin) {
-    return (
-      <div className="app-shell rz-shell rz-app">
-        <SiteHeader />
-        <main id="main-content" tabIndex={-1} className="page-space rzInterior">
-          <div className="container page-narrow">
-            <div className="page-center-card">
-              <h1 className="page-h1">Admin dashboard</h1>
-              <p className="page-lead" style={{ textAlign: "left", maxWidth: "100%" }}>
-                Set <code className="cp-kbd">VITE_SHOW_ADMIN=1</code> in <code className="cp-kbd">.env</code> and rebuild to expose admin routes in production.
-              </p>
-              <Link to="/" className="btn btn-primary" style={{ marginTop: "1rem" }}>
-                Home
-              </Link>
-            </div>
-          </div>
-        </main>
-        <SiteFooter />
-      </div>
-    );
-  }
-
   if (authChecking) {
     return (
       <>
