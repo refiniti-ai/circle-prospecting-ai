@@ -204,12 +204,69 @@ input[type="file"]::file-selector-button:hover {
 }
 
 /* Map & embeds */
-.cp-map-frame,
-.cp-map-frame iframe {
+.cp-map-frame {
   border-radius: 14px;
-  border: 1px solid rgba(5, 12, 26, 0.09) !important;
+  border: 1px solid rgba(5, 12, 26, 0.09);
   overflow: hidden;
   background: #fff;
+}
+
+.cp-map-frame iframe {
+  border: 0;
+  display: block;
+}
+
+.cp-map-with-radius {
+  position: relative;
+  overflow: hidden;
+}
+
+.cp-map-with-radius__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.cp-map-radius-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cp-map-radius-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(5, 11, 18, 0.88);
+  color: var(--text, #e8eef7);
+  font-size: 0.8rem;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.cp-map-radius-badge--on-gmaps {
+  z-index: 1;
+}
+
+.cp-map-radius-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e90ff, #32d583);
+  flex-shrink: 0;
 }
 
 /* Stat strip (admin) */

@@ -1,0 +1,383 @@
+/* Hero dashboard mock — reference layout + background scene */
+.rz-hero-dash {
+  position: relative;
+  width: 100%;
+  max-width: 700px;
+  margin-inline: auto;
+  padding: 0;
+  overflow: visible;
+}
+
+/* Scene sits behind the white dashboard card */
+.rz-hero-dash__scene {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: -4%;
+  right: -6%;
+  top: -2%;
+  bottom: -4%;
+}
+
+/* Light-blue organic blob with dot grid inside (reference mock) */
+.rz-hero-dash__blob {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 95%;
+  height: 90%;
+  border-radius: 45% 55% 52% 48% / 48% 45% 55% 52%;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 45%, rgba(224, 242, 254, 0.4) 100%);
+  overflow: hidden;
+}
+
+.rz-hero-dash__blob-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.85) 1.5px, transparent 1.5px);
+  background-size: 14px 14px;
+  opacity: 0.55;
+  mask-image: radial-gradient(ellipse 75% 70% at 45% 50%, #000 25%, transparent 85%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 45% 50%, #000 25%, transparent 85%);
+}
+
+/* Green-tinted dot grids — top-right & bottom-right corners */
+.rz-hero-dash__dots {
+  position: absolute;
+  background-image: radial-gradient(circle, rgba(34, 197, 94, 0.42) 1.25px, transparent 1.25px);
+  background-size: 11px 11px;
+}
+
+.rz-hero-dash__dots--tr {
+  top: 0;
+  right: 0;
+  width: 48%;
+  height: 42%;
+  mask-image: radial-gradient(ellipse 90% 85% at 100% 0%, #000 15%, transparent 72%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 85% at 100% 0%, #000 15%, transparent 72%);
+}
+
+/* Green + blue wavy lines — far right (reference mock) */
+.rz-hero-dash__wave {
+  position: absolute;
+  top: 2%;
+  width: 16%;
+  height: 96%;
+  overflow: visible;
+}
+
+.rz-hero-dash__wave--green {
+  right: 0;
+  z-index: 2;
+}
+
+.rz-hero-dash__wave--blue {
+  right: 3%;
+  z-index: 1;
+}
+
+.rz-hero-dash__frame {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(5, 12, 26, 0.07);
+  box-shadow:
+    0 32px 72px rgba(5, 12, 26, 0.16),
+    0 12px 28px rgba(0, 102, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset;
+}
+
+.rz-hero-dash__nav {
+  width: 56px;
+  flex-shrink: 0;
+  padding: 1.05rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+}
+
+/* Top of dashboard sidebar — uses /favicon.png */
+.rz-hero-dash__nav-logo {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  margin-bottom: 0.35rem;
+  flex-shrink: 0;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+}
+
+.rz-hero-dash__nav-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+
+.rz-hero-dash__nav-ico svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rz-hero-dash__nav-ico.is-active {
+  background: #0066ff;
+  box-shadow: 0 6px 16px rgba(0, 102, 255, 0.45);
+}
+
+.rz-hero-dash__main {
+  flex: 1;
+  min-width: 0;
+  padding: 1rem 1rem 1.05rem;
+  background: #f8fafc;
+}
+
+.rz-hero-dash__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.rz-hero-dash__stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+
+.rz-hero-dash__stat {
+  padding: 0.52rem 0.35rem;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid rgba(5, 12, 26, 0.06);
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(5, 12, 26, 0.05);
+}
+
+.rz-hero-dash__stat strong {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.rz-hero-dash__stat span {
+  display: block;
+  margin-top: 0.18rem;
+  font-size: 0.52rem;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.rz-hero-dash__grid {
+  display: grid;
+  grid-template-columns: 1.24fr 0.76fr;
+  grid-template-rows: auto auto;
+  gap: 0.55rem;
+  align-items: start;
+}
+
+.rz-hero-dash__card {
+  padding: 0.58rem 0.62rem 0.62rem;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(5, 12, 26, 0.06);
+  box-shadow: 0 2px 12px rgba(5, 12, 26, 0.05);
+}
+
+.rz-hero-dash__card--map {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: start;
+  padding-bottom: 0.45rem;
+}
+
+.rz-hero-dash__card--chart {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rz-hero-dash__card--activity {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.rz-hero-dash__card-label {
+  display: block;
+  margin-bottom: 0.42rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.rz-hero-dash__map-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f4f7fb;
+  line-height: 0;
+}
+
+.rz-hero-dash__map-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 175px;
+  object-fit: contain;
+  object-position: center top;
+}
+
+.rz-hero-dash__donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rz-hero-dash__donut {
+  width: 68px;
+  height: 68px;
+  flex-shrink: 0;
+}
+
+.rz-hero-dash__legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.rz-hero-dash__legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.54rem;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.55;
+}
+
+.rz-hero-dash__legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rz-hero-dash__legend strong {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.rz-hero-dash__feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rz-hero-dash__feed li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.34rem 0;
+  border-bottom: 1px solid rgba(5, 12, 26, 0.05);
+}
+
+.rz-hero-dash__feed li:last-child {
+  border-bottom: none;
+}
+
+.rz-hero-dash__feed-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.rz-hero-dash__feed-ico svg {
+  width: 14px;
+  height: 14px;
+}
+
+.rz-hero-dash__feed-ico--blue {
+  color: #0066ff;
+  background: rgba(0, 102, 255, 0.12);
+}
+
+.rz-hero-dash__feed-ico--green {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.rz-hero-dash__feed-text {
+  font-size: 0.56rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.35;
+}
+
+.rz-hero-dash__feed-time {
+  font-size: 0.5rem;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.rz-hero-dash__feed-link {
+  display: inline-block;
+  margin-top: 0.42rem;
+  font-size: 0.54rem;
+  font-weight: 700;
+  color: #0066ff;
+}
+
+@media (max-width: 1024px) {
+  .rz-hero-dash__stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .rz-hero-dash__stat:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .rz-hero-dash__scene {
+    left: -2%;
+    right: -2%;
+  }
+
+  .rz-hero-dash__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rz-hero-dash__card--map,
+  .rz-hero-dash__card--chart,
+  .rz-hero-dash__card--activity {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .rz-hero-dash__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .rz-hero-dash__stat:nth-child(n + 3) {
+    display: none;
+  }
+}

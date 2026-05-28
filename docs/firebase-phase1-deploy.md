@@ -34,18 +34,19 @@ Hosting does **not** rewrite `/api/**`. The production build must include your A
 
 ### B) Same domain `/api/*` → Cloud Run
 
-1. Create Cloud Run service **`circle-prospecting-api`** in **`us-central1`** (Google Cloud Console or `gcloud run deploy ...`).
-2. Add the **first** rewrite in `firebase.json` **before** the `**` rule:
+1. Deploy Cloud Run service **`circle-prospecting-ai-git`** in **`us-central1`** (must match `firebase.json`):
 
-   ```json
-   {
-     "source": "/api/**",
-     "run": {
-       "serviceId": "circle-prospecting-api",
-       "region": "us-central1"
-     }
-   }
+   ```bash
+   npm run deploy:gcloud
    ```
+
+   Or manually:
+
+   ```bash
+   gcloud run deploy circle-prospecting-ai-git --source . --region us-central1 --allow-unauthenticated --project circle-prospecting-ai --port 8080
+   ```
+
+2. `firebase.json` already rewrites `/api/**` → that service (keep this **before** the `**` SPA rule):
 
 3. Leave **`VITE_API_BASE_URL` empty** when building; the SPA calls relative `/api/*`.
 4. Stripe webhook can use the Hosting URL:
@@ -69,14 +70,14 @@ Set these on the API process:
 Optional:
 
 - `FIREBASE_SERVICE_ACCOUNT_PATH` or `FIREBASE_SERVICE_ACCOUNT_JSON`
-- `GHL_MAIL_WEBHOOK_URL`, `SMTP_*`
+- `GHL_MAIL_WEBHOOK_URL`, `RESEND_API_KEY` (+ `RESEND_FROM`), or `SMTP_*`
 
 ## Deploy API to Cloud Run (CLI example)
 
 From repo root, after `gcloud` auth and project set:
 
 ```bash
-gcloud run deploy circle-prospecting-api --source . --region us-central1 --allow-unauthenticated --project YOUR_GCP_PROJECT
+npm run deploy:gcloud
 ```
 
 Configure env vars and secrets in the Cloud Run service (Console or `--set-env-vars` / Secret Manager). Do not bake `secrets/` into the image for production; use Secret Manager or `FIREBASE_SERVICE_ACCOUNT_JSON`.

@@ -1,0 +1,14 @@
+# Speed up `gcloud run deploy --source .` uploads (mirrors .dockerignore).
+node_modules/
+dist/
+.git/
+secrets/
+.env
+.env.*
+!.env.example
+*.md
+.cursor/
+terminals/
+**/.DS_Store
+next-app/node_modules/
+next-app/.next/

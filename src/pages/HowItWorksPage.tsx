@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { MarketingPageShell } from "../components/marketing/MarketingPageShell";
-import { SalesProcessInfographicSection } from "../components/marketing/PosterSections";
 import { HowItWorksSection } from "../components/marketing/MarketingSections";
 
 export function HowItWorksPage() {
@@ -12,7 +11,6 @@ export function HowItWorksPage() {
       heroTitle="How it works"
       heroLead="Choose your farm, we run the dials and messages on your behalf, and appointments flow back to you—data + dialer + humans in one motion."
     >
-      <SalesProcessInfographicSection />
       <HowItWorksSection />
       <section className="section home-section">
         <div className="container section-surface" style={{ textAlign: "center", padding: "1.5rem" }}>

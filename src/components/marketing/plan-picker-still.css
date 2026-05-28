@@ -1,0 +1,155 @@
+/* Homepage plan-picker still — compact 2×2 grid beside in-app guides */
+
+/* Single surface: outer panel is .rz-glass-panel — no inner card box */
+.rz-plan-still .pay-card.pay-plan {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.rz-plan-still .pay-section-title {
+  font-size: 0.92rem;
+  margin-bottom: 0.75rem;
+}
+
+.rz-plan-still .pay-step-block {
+  margin-bottom: 0.85rem;
+}
+
+.rz-plan-still .pay-step-block:last-child {
+  margin-bottom: 0;
+}
+
+.rz-plan-still .buy-step2-subhead {
+  font-size: 0.76rem !important;
+  margin-bottom: 0.3rem !important;
+}
+
+.rz-plan-still .pay-subhint,
+.rz-plan-still .muted,
+.rz-plan-still .pay-rate-line,
+.rz-plan-still .muted-label {
+  font-size: 0.68rem !important;
+  line-height: 1.45;
+}
+
+.rz-plan-still .pay-radius-row {
+  gap: 0.35rem;
+}
+
+.rz-plan-still .pay-radius-chip {
+  padding: 0.38rem 0.65rem;
+}
+
+.rz-plan-still .pay-radius-chip strong {
+  font-size: 0.66rem;
+}
+
+.rz-plan-still .pay-radius-chip span {
+  font-size: 0.6rem;
+}
+
+.rz-plan-still .buy-listing-count-banner {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+}
+
+.rz-plan-still .buy-listing-count-banner__n {
+  font-size: 1.25rem;
+}
+
+.rz-plan-still .buy-listing-count-banner__l {
+  font-size: 0.68rem;
+  margin-top: 0.15rem;
+}
+
+.rz-plan-still .pay-home-input {
+  max-width: 100%;
+  margin-top: 0.35rem;
+}
+
+.rz-plan-still .premium-input {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.rz-plan-still .buy-pricing-scroll {
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+}
+
+.rz-plan-still .buy-pricing-stack--two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.rz-plan-still .buy-pricing-block {
+  border-radius: 12px;
+  border-width: 1px;
+  min-width: 0;
+  box-shadow: 0 2px 10px rgba(5, 12, 26, 0.04);
+}
+
+.rz-plan-still .buy-pricing-block.is-selected {
+  border-width: 2px;
+  box-shadow: 0 6px 18px rgba(0, 122, 255, 0.12);
+}
+
+.rz-plan-still .buy-price-title-btn {
+  padding: 0.45rem 0.5rem;
+  font-size: 0.68rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rz-plan-still .buy-price-table {
+  font-size: 0.68rem;
+}
+
+.rz-plan-still .buy-price-colheads th {
+  font-size: 0.52rem;
+  padding: 0.28rem 0.35rem;
+  letter-spacing: 0.05em;
+}
+
+.rz-plan-still .buy-price-col-select {
+  width: 1.5rem;
+}
+
+.rz-plan-still .buy-price-table td {
+  padding: 0.32rem 0.35rem;
+}
+
+.rz-plan-still .buy-price-table td:nth-child(3) {
+  font-size: 0.62rem;
+}
+
+.rz-plan-still .buy-opp-radio {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+@media (max-width: 1100px) {
+  .rz-plan-still .buy-pricing-stack--two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .rz-plan-still .pay-radius-row {
+    flex-wrap: wrap;
+  }
+
+  .rz-plan-still .pay-radius-chip {
+    flex: 1 1 calc(50% - 0.35rem);
+    min-width: 0;
+  }
+}

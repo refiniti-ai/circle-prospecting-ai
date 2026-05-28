@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getFirestoreDb } from "./firebaseAdmin.js";
 
+export type LeadWorkStatus = "pending" | "completed";
+
 export type PurchaseNotificationRecord = {
   orderNumber: string;
   notifiedAt: string;
@@ -18,6 +20,12 @@ export type PurchaseNotificationRecord = {
   leadTier?: string | null;
   requestedLeads?: number | null;
   targetingSummary?: string | null;
+  /** Admin: neighborhood / lead-pack fulfillment tracked in dashboard */
+  leadWorkStatus?: LeadWorkStatus | null;
+  /** Set after customer order receipt email is successfully handed to GHL/Resend/SMTP */
+  customerReceiptEmailSentAt?: string | null;
+  /** Set after admin new-purchase notify is successfully sent */
+  adminPurchaseEmailSentAt?: string | null;
 };
 
 type SessionEntryV1 = { orderNumber: string; notifiedAt: string };
@@ -53,9 +61,9 @@ function writeLog(log: PurchaseLog) {
   fs.writeFileSync(DATA, JSON.stringify(log, null, 2), "utf8");
 }
 
-/** Plain object safe for Firestore (no undefined). */
+/** Plain object safe for Firestore (no undefined). Omit leadWorkStatus unless set so merge does not wipe admin fulfillment. */
 function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord & { sessionId?: string }) {
-  return {
+  const base = {
     sessionId,
     orderNumber: record.orderNumber,
     notifiedAt: record.notifiedAt,
@@ -70,6 +78,17 @@ function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord &
     requestedLeads: record.requestedLeads ?? null,
     targetingSummary: record.targetingSummary ?? null,
   };
+  let out: Record<string, unknown> =
+    record.leadWorkStatus === "pending" || record.leadWorkStatus === "completed"
+      ? { ...base, leadWorkStatus: record.leadWorkStatus }
+      : base;
+  if (record.customerReceiptEmailSentAt) {
+    out = { ...out, customerReceiptEmailSentAt: record.customerReceiptEmailSentAt };
+  }
+  if (record.adminPurchaseEmailSentAt) {
+    out = { ...out, adminPurchaseEmailSentAt: record.adminPurchaseEmailSentAt };
+  }
+  return out;
 }
 
 export async function hasPurchaseNotification(sessionId: string): Promise<boolean> {
@@ -91,7 +110,15 @@ export async function markPurchaseNotification(
   record: Omit<PurchaseNotificationRecord, "orderNumber"> & { orderNumber: string }
 ) {
   const log = readLog();
-  log.sessions[sessionId] = record;
+  const prev = log.sessions[sessionId];
+  const merged: SessionEntry = {
+    ...(prev ?? {}),
+    ...record,
+    leadWorkStatus: prev?.leadWorkStatus ?? record.leadWorkStatus ?? null,
+    customerReceiptEmailSentAt: prev?.customerReceiptEmailSentAt ?? record.customerReceiptEmailSentAt,
+    adminPurchaseEmailSentAt: prev?.adminPurchaseEmailSentAt ?? record.adminPurchaseEmailSentAt,
+  };
+  log.sessions[sessionId] = merged;
   writeLog(log);
 
   const db = getFirestoreDb();
@@ -100,7 +127,7 @@ export async function markPurchaseNotification(
       await db
         .collection(PURCHASE_COLLECTION)
         .doc(sessionId)
-        .set(purchaseDocData(sessionId, { ...record, sessionId }), { merge: true });
+        .set(purchaseDocData(sessionId, { ...merged, sessionId }), { merge: true });
     } catch (err) {
       console.error("[purchaseConfirmStore] Firestore write failed; local JSON saved", err);
     }
@@ -123,6 +150,9 @@ function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] 
     leadTier: raw.leadTier ?? null,
     requestedLeads: raw.requestedLeads ?? null,
     targetingSummary: raw.targetingSummary ?? null,
+    leadWorkStatus: raw.leadWorkStatus === "completed" || raw.leadWorkStatus === "pending" ? raw.leadWorkStatus : null,
+    customerReceiptEmailSentAt: raw.customerReceiptEmailSentAt != null ? String(raw.customerReceiptEmailSentAt) : null,
+    adminPurchaseEmailSentAt: raw.adminPurchaseEmailSentAt != null ? String(raw.adminPurchaseEmailSentAt) : null,
   }));
 }
 
@@ -153,6 +183,11 @@ export async function listPurchaseNotifications(): Promise<(PurchaseNotification
           leadTier: d.leadTier != null ? String(d.leadTier) : null,
           requestedLeads: typeof d.requestedLeads === "number" ? d.requestedLeads : null,
           targetingSummary: d.targetingSummary != null ? String(d.targetingSummary) : null,
+          leadWorkStatus:
+            d.leadWorkStatus === "completed" || d.leadWorkStatus === "pending" ? d.leadWorkStatus : null,
+          customerReceiptEmailSentAt:
+            d.customerReceiptEmailSentAt != null ? String(d.customerReceiptEmailSentAt) : null,
+          adminPurchaseEmailSentAt: d.adminPurchaseEmailSentAt != null ? String(d.adminPurchaseEmailSentAt) : null,
         });
       }
     } catch (err) {
@@ -163,6 +198,91 @@ export async function listPurchaseNotifications(): Promise<(PurchaseNotification
   const rows = Array.from(merged.values());
   rows.sort((a, b) => (a.notifiedAt < b.notifiedAt ? 1 : -1));
   return rows;
+}
+
+function receiptSentAtFromEntry(raw: SessionEntry | undefined): string | null {
+  const v = raw?.customerReceiptEmailSentAt;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function adminEmailSentAtFromEntry(raw: SessionEntry | undefined): string | null {
+  const v = raw?.adminPurchaseEmailSentAt;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+export async function isCustomerReceiptEmailSent(sessionId: string): Promise<boolean> {
+  const id = sessionId.trim();
+  if (!id) return false;
+  const log = readLog();
+  const fromFile = receiptSentAtFromEntry(log.sessions[id]);
+  if (fromFile) return true;
+  const db = getFirestoreDb();
+  if (!db) return false;
+  try {
+    const snap = await db.collection(PURCHASE_COLLECTION).doc(id).get();
+    if (!snap.exists) return false;
+    const v = snap.data()?.customerReceiptEmailSentAt;
+    return typeof v === "string" && v.trim().length > 0;
+  } catch (err) {
+    console.error("[purchaseConfirmStore] isCustomerReceiptEmailSent", err);
+    return false;
+  }
+}
+
+export async function isAdminPurchaseEmailSent(sessionId: string): Promise<boolean> {
+  const id = sessionId.trim();
+  if (!id) return false;
+  const log = readLog();
+  if (adminEmailSentAtFromEntry(log.sessions[id])) return true;
+  const db = getFirestoreDb();
+  if (!db) return false;
+  try {
+    const snap = await db.collection(PURCHASE_COLLECTION).doc(id).get();
+    if (!snap.exists) return false;
+    const v = snap.data()?.adminPurchaseEmailSentAt;
+    return typeof v === "string" && v.trim().length > 0;
+  } catch (err) {
+    console.error("[purchaseConfirmStore] isAdminPurchaseEmailSent", err);
+    return false;
+  }
+}
+
+export async function markCustomerReceiptEmailSent(sessionId: string): Promise<void> {
+  const id = sessionId.trim();
+  if (!id) return;
+  const iso = new Date().toISOString();
+  const log = readLog();
+  if (log.sessions[id]) {
+    log.sessions[id] = { ...log.sessions[id], customerReceiptEmailSentAt: iso };
+    writeLog(log);
+  }
+  const db = getFirestoreDb();
+  if (db) {
+    try {
+      await db.collection(PURCHASE_COLLECTION).doc(id).set({ customerReceiptEmailSentAt: iso }, { merge: true });
+    } catch (err) {
+      console.error("[purchaseConfirmStore] markCustomerReceiptEmailSent Firestore failed", err);
+    }
+  }
+}
+
+export async function markAdminPurchaseEmailSent(sessionId: string): Promise<void> {
+  const id = sessionId.trim();
+  if (!id) return;
+  const iso = new Date().toISOString();
+  const log = readLog();
+  if (log.sessions[id]) {
+    log.sessions[id] = { ...log.sessions[id], adminPurchaseEmailSentAt: iso };
+    writeLog(log);
+  }
+  const db = getFirestoreDb();
+  if (db) {
+    try {
+      await db.collection(PURCHASE_COLLECTION).doc(id).set({ adminPurchaseEmailSentAt: iso }, { merge: true });
+    } catch (err) {
+      console.error("[purchaseConfirmStore] markAdminPurchaseEmailSent Firestore failed", err);
+    }
+  }
 }
 
 export function orderNumberFromSessionId(sessionId: string): string {
@@ -180,6 +300,38 @@ export async function listPurchasesForEmail(email: string): Promise<(PurchaseNot
 }
 
 /** Newest first (same order as listPurchaseNotifications). */
+export async function setPurchaseLeadWorkStatus(sessionId: string, status: LeadWorkStatus): Promise<boolean> {
+  const id = sessionId.trim();
+  if (!id) return false;
+  const log = readLog();
+  const inFile = Boolean(log.sessions[id]);
+  let inFs = false;
+  const db = getFirestoreDb();
+  if (db) {
+    try {
+      const snap = await db.collection(PURCHASE_COLLECTION).doc(id).get();
+      inFs = snap.exists;
+    } catch (err) {
+      console.error("[purchaseConfirmStore] Firestore read for leadWorkStatus", err);
+    }
+  }
+  if (!inFile && !inFs) return false;
+
+  if (log.sessions[id]) {
+    log.sessions[id] = { ...log.sessions[id], leadWorkStatus: status };
+    writeLog(log);
+  }
+  if (db) {
+    try {
+      await db.collection(PURCHASE_COLLECTION).doc(id).set({ leadWorkStatus: status }, { merge: true });
+    } catch (err) {
+      console.error("[purchaseConfirmStore] Firestore leadWorkStatus update failed", err);
+      return inFile;
+    }
+  }
+  return true;
+}
+
 export async function listLeadPackSessionIdsForEmail(email: string): Promise<string[]> {
   const e = email.trim().toLowerCase();
   if (!e.includes("@")) return [];

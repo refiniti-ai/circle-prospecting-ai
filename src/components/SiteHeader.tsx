@@ -7,7 +7,7 @@ const navItems = [
   { to: "/how-it-works", label: "Features" },
   { to: "/campaign-pricing", label: "Pricing" },
   { to: "/coverage", label: "Coverage" },
-  { to: "/content", label: "Content" },
+  { to: "/contact", label: "Contact" },
 ];
 
 function IconArrow() {
@@ -58,7 +58,7 @@ export function SiteHeader() {
                   Log in
                 </Link>
               </div>
-              <Link to="/content" className="btn btn-ghost rz-header-btn-demo" onClick={() => setOpen(false)}>
+              <Link to="/contact" className="btn btn-ghost rz-header-btn-demo" onClick={() => setOpen(false)}>
                 Get demo
               </Link>
               <Link to="/buy-leads" className="btn btn-primary rz-header-btn-primary" onClick={() => setOpen(false)}>
@@ -94,7 +94,7 @@ export function SiteHeader() {
                   Log in
                 </Link>
               </div>
-              <Link to="/content" className="btn btn-ghost rz-mobile-btn-full" onClick={() => setOpen(false)}>
+              <Link to="/contact" className="btn btn-ghost rz-mobile-btn-full" onClick={() => setOpen(false)}>
                 Get demo
               </Link>
               <Link to="/buy-leads" className="btn btn-primary rz-mobile-btn-full" onClick={() => setOpen(false)}>
@@ -249,8 +249,8 @@ export function SiteHeader() {
         }
         @media (max-width: 420px) {
           .header-logo-img {
-            max-width: 176px !important;
-            height: auto !important;
+            max-width: min(100%, 240px) !important;
+            height: 38px !important;
           }
         }
       `}</style>

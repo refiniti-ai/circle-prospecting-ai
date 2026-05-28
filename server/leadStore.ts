@@ -143,14 +143,15 @@ export function estimateLeadCount(filter: LeadCountFilter) {
     );
   }
 
-  // Normalization multipliers for fields absent in static inventory
+  // Normalization: larger radius monotonically increases modeled reach (area grows with radius).
   let normalized = leads.length;
   const r = Number.isFinite(filter.radiusMiles) ? Math.max(0.25, Number(filter.radiusMiles)) : 1;
-  normalized = Math.round(normalized * Math.min(1.25, 0.5 + r * 0.22));
+  const radiusMultiplier = Math.min(6, 0.5 + (r / 0.25) * 0.38);
+  normalized = Math.round(normalized * radiusMultiplier);
   if (filter.occupancy === "owner") normalized = Math.round(normalized * 0.8);
   if (filter.includeContact === "phones") normalized = Math.round(normalized * 1.05);
   if (filter.flags?.length) normalized = Math.round(normalized * Math.max(0.55, 1 - filter.flags.length * 0.08));
-  normalized = Math.max(100, normalized);
+  normalized = leads.length === 0 ? 0 : Math.max(1, normalized);
 
   return {
     available: normalized,

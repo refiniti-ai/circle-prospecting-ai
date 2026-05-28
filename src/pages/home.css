@@ -1,9 +1,40 @@
 .home-main {
-  --section-space: clamp(3.25rem, 7vw, 5.5rem);
+  --section-space: clamp(2.5rem, 5vw, 3.75rem);
 }
 
 .home-section {
   padding: var(--section-space) 0;
+}
+
+/* Homepage — tighter, balanced vertical rhythm (hero/banner unchanged) */
+.rz-home-rez > .rz-brokerage-trust {
+  padding-top: clamp(1.25rem, 3vw, 1.75rem);
+  padding-bottom: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.rz-home-rez > .rz-positioning-strip {
+  padding-top: clamp(1.15rem, 2.5vw, 1.6rem);
+  padding-bottom: clamp(1.15rem, 2.5vw, 1.6rem);
+  margin-top: 0;
+}
+
+.rz-home-rez > .rz-proof-rail {
+  margin-top: 0;
+  padding-top: clamp(2rem, 4.5vw, 2.75rem);
+  padding-bottom: clamp(2rem, 4.5vw, 2.75rem);
+}
+
+.rz-home-rez > .rz-showcase-split {
+  padding-top: clamp(2.75rem, 6.5vw, 4.5rem);
+  padding-bottom: clamp(2.75rem, 6.5vw, 4.5rem);
+}
+
+.rz-home-rez > .rz-circle-showcase-wrap .rz-showcase-split {
+  padding-bottom: clamp(2rem, 4.5vw, 3rem);
+}
+
+.rz-home-rez > .rz-circle-showcase-radius {
+  padding-block: clamp(2rem, 4.5vw, 3rem);
 }
 
 /* —— Hero (mock layout) —— */

@@ -1,0 +1,15 @@
+# Firebase App Hosting — create/link backend in console (Hosting & serverless → App Hosting).
+# SSR runs on managed Cloud Run (Node 20); backend id (e.g. your "ssrturfflexapp" name) is chosen in Firebase, not here.
+# See: https://firebase.google.com/docs/app-hosting/configure
+#
+# Set secrets (Stripe, etc.) in console or via secret: references — do not commit real keys.
+
+runConfig:
+  minInstances: 0
+  maxInstances: 100
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+# Add env vars in Firebase console (recommended) or here with non-empty values / secret: refs.
+# e.g. NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, STRIPE_SECRET_KEY (secret), NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY

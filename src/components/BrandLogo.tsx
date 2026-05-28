@@ -1,4 +1,5 @@
 import { useCallback, useState, type CSSProperties } from "react";
+import "./BrandLogo.css";
 
 type Props = {
   variant?: "header" | "footer";
@@ -6,39 +7,49 @@ type Props = {
   style?: CSSProperties;
 };
 
-const BRAND_LOGO_SRC = "/circle-prospecting-logo.png";
-const FALLBACKS = ["/circle-prospecting-logo.webp", "/circle-prospecting-logo.svg", "/logo.svg", "/logo.jpeg"] as const;
+/** Header prefers `public/circle-prospecting-logo.webp`; footer keeps PNG first for email clients / older engines. */
+const HEADER_SRC_ORDER = ["/circle-prospecting-logo.webp", "/circle-prospecting-logo.png", "/logo.svg"] as const;
+const FOOTER_SRC_ORDER = ["/circle-prospecting-logo.png", "/circle-prospecting-logo.webp", "/logo.svg"] as const;
 
 /**
- * Primary mark: wide PNG in `public/circle-prospecting-logo.png` (header + footer),
- * then webp/svg/jpeg fallbacks if load fails.
+ * Full wordmark lockup image (header + footer). Uses WebP/PNG in `public/`.
  */
 export function BrandLogo({ variant = "header", className, style }: Props) {
-  const [fallbackStep, setFallbackStep] = useState(0);
-  const candidates = [BRAND_LOGO_SRC, ...FALLBACKS];
-  const src = candidates[fallbackStep] ?? BRAND_LOGO_SRC;
+  const [step, setStep] = useState(0);
+  const candidates = variant === "header" ? HEADER_SRC_ORDER : FOOTER_SRC_ORDER;
+  const first = candidates[0];
+  const src = candidates[step] ?? first;
   const lastIndex = candidates.length - 1;
 
   const onErr = useCallback(() => {
-    setFallbackStep((i) => (i < lastIndex ? i + 1 : i));
+    setStep((i) => (i < lastIndex ? i + 1 : i));
   }, [lastIndex]);
 
   const h = variant === "header" ? 44 : 38;
+
+  const rootClass = ["brand-logo", variant === "footer" ? "brand-logo--footer" : "brand-logo--header", className]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <img
-      className={className}
+      className={rootClass}
       src={src}
       alt="Circle Prospecting AI"
-      width={variant === "header" ? 220 : 200}
+      width={variant === "header" ? 320 : 280}
       height={h}
       style={{
         height: h,
         width: "auto",
-        maxWidth: variant === "header" ? "min(100%, min(320px, 52vw))" : "min(100%, 280px)",
+        maxWidth: variant === "header" ? "min(100%, min(340px, 54vw))" : "min(100%, 300px)",
         display: "block",
+        objectFit: "contain",
+        objectPosition: "left center",
         ...style,
       }}
-      onError={fallbackStep < lastIndex ? onErr : undefined}
+      onError={step < lastIndex ? onErr : undefined}
+      decoding="async"
+      draggable={false}
     />
   );
 }

@@ -59,6 +59,7 @@ export async function processInboundNewListing(raw: unknown) {
 
   const ghl = await upsertGhlContactAndOpportunity({
     orderId: listing.id,
+    mls: listing.mls,
     address: listing.address,
     cityStateZip: listing.cityStateZip,
     agentName: listing.agentName,

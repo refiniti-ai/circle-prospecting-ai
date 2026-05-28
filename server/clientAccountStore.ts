@@ -69,31 +69,59 @@ export async function getClientAccount(email: string): Promise<ClientAccountReco
   const e = normalizeEmail(email);
   if (!e.includes("@")) return null;
 
+  /**
+   * Firestore first: on Cloud Run the JSON file is per-instance / ephemeral; accounts written to
+   * Firestore must be found from any instance. Local file is the fallback for dev without Firebase.
+   */
+  const db = getFirestoreDb();
+  if (db) {
+    try {
+      const snap = await db.collection(COLLECTION).doc(e).get();
+      if (snap.exists) {
+        const d = snap.data() as { passwordHash?: string; salt?: string; updatedAt?: string };
+        if (d?.passwordHash && d?.salt) {
+          return {
+            email: e,
+            passwordHash: d.passwordHash,
+            salt: d.salt,
+            updatedAt: d.updatedAt || new Date().toISOString(),
+          };
+        }
+      }
+    } catch (err) {
+      console.error("[clientAccountStore] Firestore read failed", err);
+    }
+  }
+
   const log = readFile();
   const fromFile = log.accounts[e];
   if (fromFile?.passwordHash && fromFile?.salt) {
     return { email: e, passwordHash: fromFile.passwordHash, salt: fromFile.salt, updatedAt: fromFile.updatedAt };
   }
 
+  return null;
+}
+
+/** Emails that have a dashboard password (local + Firestore merge). */
+export async function listClientAccountEmails(): Promise<string[]> {
+  const set = new Set<string>();
+  const log = readFile();
+  for (const [email, row] of Object.entries(log.accounts)) {
+    if (row?.passwordHash && row?.salt) set.add(normalizeEmail(email));
+  }
   const db = getFirestoreDb();
   if (db) {
     try {
-      const snap = await db.collection(COLLECTION).doc(e).get();
-      if (!snap.exists) return null;
-      const d = snap.data() as { passwordHash?: string; salt?: string; updatedAt?: string };
-      if (!d?.passwordHash || !d?.salt) return null;
-      return {
-        email: e,
-        passwordHash: d.passwordHash,
-        salt: d.salt,
-        updatedAt: d.updatedAt || new Date().toISOString(),
-      };
+      const snap = await db.collection(COLLECTION).get();
+      for (const doc of snap.docs) {
+        const d = doc.data() as { passwordHash?: string; salt?: string };
+        if (d?.passwordHash && d?.salt) set.add(normalizeEmail(doc.id));
+      }
     } catch (err) {
-      console.error("[clientAccountStore] Firestore read failed", err);
+      console.error("[clientAccountStore] list emails Firestore failed", err);
     }
   }
-
-  return null;
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
 
 export async function upsertClientPassword(email: string, passwordHash: string, salt: string): Promise<void> {
@@ -101,16 +129,16 @@ export async function upsertClientPassword(email: string, passwordHash: string, 
   if (!e.includes("@")) throw new Error("invalid email");
 
   const updatedAt = new Date().toISOString();
-  const log = readFile();
-  log.accounts[e] = { passwordHash, salt, updatedAt };
-  writeFile(log);
-
   const db = getFirestoreDb();
   if (db) {
     try {
       await db.collection(COLLECTION).doc(e).set({ email: e, passwordHash, salt, updatedAt }, { merge: true });
     } catch (err) {
-      console.error("[clientAccountStore] Firestore write failed; local JSON saved", err);
+      console.error("[clientAccountStore] Firestore write failed", err);
     }
   }
+
+  const log = readFile();
+  log.accounts[e] = { passwordHash, salt, updatedAt };
+  writeFile(log);
 }

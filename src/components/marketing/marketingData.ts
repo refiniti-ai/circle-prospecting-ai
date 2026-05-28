@@ -1,5 +1,8 @@
 import type { StatIconId } from "./icons";
 
+/** Hero dashboard — Market Activity map (client asset). */
+export const HERO_MARKET_ACTIVITY_MAP = "/marketing/hero-market-activity-map.png";
+
 export const MARKETING_IMG = {
   hero: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=2000&q=86",
   modern: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=86",
@@ -9,12 +12,12 @@ export const MARKETING_IMG = {
 };
 
 /** Homepage + How it works — client: dead-simple path to conversations */
-export const WORKFLOW_SECTION_TITLE = "Three steps from your area to conversations";
+export const WORKFLOW_SECTION_TITLE = "From Listings to Conversations in 3 Simple Steps";
 
 export const STEPS: { n: string; t: string; d: string }[] = [
   {
     n: "01",
-    t: "Choose your target area",
+    t: "Select Radius around your Listing",
     d: "Pick your market center, radius, and filters—so every dial matches the pocket you actually farm.",
   },
   {
@@ -29,10 +32,10 @@ export const STEPS: { n: string; t: string; d: string }[] = [
   },
 ];
 
-export const BRAND_PLATFORM_LINE = "Done-for-you prospecting — we call your market for you";
+export const BRAND_PLATFORM_LINE = "Just Listed & Just Sold neighborhood promotion";
 
 export const POSITIONING_STRIP =
-  "We have the data, the dialer, and the callers — so you get conversations, appointments, and deals.";
+  "We combine live callers, AI calling, and ringless voicemail with 4-6 outreach attempts over a 14-day campaign to promote you as the trusted local real estate expert in the neighborhood.";
 
 export const AGENT_PAIN_POINTS: string[] = [
   "Buying data but still stuck dialing yourself",
@@ -60,10 +63,10 @@ export const PRODUCT_LANES: readonly {
   outcomes: readonly string[];
 }[] = [
   {
-    badge: "Data",
-    title: "Lists + targeting",
-    lead: "Homeowner intelligence for your radius—filters and counts so you’re not spraying a raw CSV at the market.",
-    outcomes: ["Farm-ready homeowner records", "Radius + motivator targeting", "Exports your ops team can trust"],
+    badge: "Full service",
+    title: "Live callers + appointment setting",
+    lead: "Real reps extending your brand—dialogue, qualification, and booked appointments when you need white-glove execution.",
+    outcomes: ["Human conversations—not blasts", "Calendar-ready opportunities", "Built for competitive markets"],
   },
   {
     badge: "AI outreach",
@@ -72,10 +75,10 @@ export const PRODUCT_LANES: readonly {
     outcomes: ["Scaled coverage in your ring", "Consistent cadence without you on the headset", "More at-bats for conversations"],
   },
   {
-    badge: "Full service",
-    title: "Live callers + appointment setting",
-    lead: "Real reps extending your brand—dialogue, qualification, and booked appointments when you need white-glove execution.",
-    outcomes: ["Human conversations—not blasts", "Calendar-ready opportunities", "Built for competitive markets"],
+    badge: "Data",
+    title: "Lists + targeting",
+    lead: "Homeowner intelligence for your radius—filters and counts so you’re not spraying a raw CSV at the market.",
+    outcomes: ["Farm-ready homeowner records", "Radius + motivator targeting", "Exports your ops team can trust"],
   },
 ] as const;
 
@@ -95,15 +98,15 @@ export const PRODUCT_UI_GUIDE_CHAT: readonly { role: "bot" | "user"; body: strin
     role: "bot",
     body: "Yes—toggle absentee + high-equity filters on this run. I’ll rebalance the dial queue so those homeowners hit first in the next batch.",
   },
-  { role: "user", body: "Send me the callback hotlist for tonight." },
+  { role: "user", body: "Perfect—send me the updated homeowner count before tonight’s dial." },
   {
     role: "bot",
-    body: "Done—23 warm callbacks with dispositions are in your dashboard export. Want a one-tap handoff to your CRM webhook?",
+    body: "You’re set: 412 homeowners match absentee + high-equity in the 1-mile ring. I’ll drop the export link in your dashboard when the batch is queued.",
   },
-  { role: "user", body: "Add a second pass on voicemail-only homes tomorrow morning." },
+  { role: "user", body: "Great—queue the live-caller lane for callbacks once the first pass finishes." },
   {
     role: "bot",
-    body: "Scheduled: VM drop #2 at 9:00 AM local, same script family. You’ll get a summary ping when the pass finishes.",
+    body: "Queued. You’ll see live-caller dispositions in your dashboard as callbacks complete—export anytime for your ISA handoff.",
   },
 ] as const;
 
@@ -112,13 +115,13 @@ export const BLOG_CARDS: { title: string; date: string; image: string; href: str
     title: "When AI + live callers beat “just the data” for circle prospecting",
     date: "February 2026",
     image: MARKETING_IMG.modern,
-    href: "/content",
+    href: "/contact",
   },
   {
     title: "From radius pick to booked callbacks—what ops should expect",
     date: "January 2026",
     image: MARKETING_IMG.skyline,
-    href: "/content",
+    href: "/contact",
   },
 ];
 
@@ -139,41 +142,102 @@ export const TRUST_BRANDS: string[] = [
   "Ops & marketing directors",
 ];
 
+/** Homepage “Trusted by…” carousel — add images under /public/logos/brokerages/ (see README there). */
+export type BrokerageLogo = {
+  id: string;
+  name: string;
+  src: string;
+  alt: string;
+};
+
+export const BROKERAGE_LOGOS: BrokerageLogo[] = [
+  {
+    id: "remax",
+    name: "RE/MAX",
+    src: "/logos/brokerages/REMAX-logo.webp",
+    alt: "RE/MAX",
+  },
+  {
+    id: "coldwell-banker",
+    name: "Coldwell Banker",
+    src: "/logos/brokerages/Coldwell-Banker_logo.webp",
+    alt: "Coldwell Banker",
+  },
+  {
+    id: "homeservices",
+    name: "HomeServices of America",
+    src: "/logos/brokerages/HomeServices-of-America-logo.webp",
+    alt: "HomeServices of America, a Berkshire Hathaway affiliate",
+  },
+  {
+    id: "berkshire",
+    name: "Berkshire Hathaway HomeServices",
+    src: "/logos/brokerages/Berkshire-Hathaway-HomeServices-logo.webp",
+    alt: "Berkshire Hathaway HomeServices",
+  },
+  {
+    id: "exp",
+    name: "eXp Realty",
+    src: "/logos/brokerages/cropped-eXp-Realty-Logo.webp",
+    alt: "eXp Realty",
+  },
+  {
+    id: "anywhere",
+    name: "Anywhere",
+    src: "/logos/brokerages/AnywhereAdvisors_logo.webp",
+    alt: "Anywhere Advisors",
+  },
+  {
+    id: "weichert",
+    name: "Weichert",
+    src: "/logos/brokerages/weichert_logo.webp",
+    alt: "Weichert Realtors",
+  },
+  {
+    id: "sothebys",
+    name: "Sotheby's International Realty",
+    src: "/logos/brokerages/Sotheby-logo.webp",
+    alt: "Sotheby's International Realty",
+  },
+];
+
+export const TRUSTED_BROKERAGES_HEADLINE = "Trusted by World's Top Brokerages and Agents";
+
 /**
  * Homepage proof rail — outcome + execution clarity.
  * Benchmark line is illustrative; real results vary by market and follow-up.
  */
 export const REZ_PROOF_LINE: { num: string; label: string }[] = [
-  { num: "We call", label: "AI dialing + live callers reach homeowners for you—not “here’s a CSV, good luck.”" },
-  { num: "~20+", label: "Benchmark: 20+ conversations per ~10,000 homeowners on typical campaigns (results vary)" },
-  { num: "3-in-1", label: "Data + dialer + humans in one prospecting engine" },
-  { num: "$ / home", label: "Published per-homeowner pricing before you commit" },
+  { num: "500,000+", label: "Phone calls made across client campaigns" },
+  { num: "1,500+", label: "Seller leads generated" },
+  { num: "300+", label: "Closed deals created from those opportunities" },
+  { num: "$4M+", label: "Commissions generated for clients" },
 ];
 
 export const REZ_SHOWCASE_LEADS = {
-  kicker: "Outcomes, not features",
-  title: "We generate conversations in your market — you show up for the appointment.",
+  kicker: "14-day neighborhood campaign",
+  title: "We promote you around every Just Listed and Just Sold property.",
   lead:
-    "Circle Prospecting AI is built for operators who are tired of paying for data and still owning the dialer. We combine lists, AI outreach, and live callers so homeowners get contacted on your behalf—and you get real opportunities back.",
+    "Over a 14-day campaign, we make 4-6 outreach attempts per listing using live callers, AI calls, and ringless voicemail to keep your name in front of nearby homeowners.",
   bullets: [
-    "We contact homeowners (calls, voicemail, text) — you’re not grinding cold lists solo",
-    "AI lanes for scale + hybrid / live lanes when you need human dialogue",
-    "Just listed & just sold campaigns supported — same engine, clearer story at the door",
-    "Dashboard + handoffs so ops and agents see delivery, not mystery exports",
-    "Per-homeowner pricing bands — know your marketing spend before checkout",
-    "Built for teams who want appointments, not another tool subscription",
+    "Homeowners around your listings hear from your brand, not just another postcard",
+    "4-6 contact attempts per listing over a 14-day campaign",
+    "Live callers, AI calling, and ringless voicemail in one coordinated system",
+    "Built to position you as the trusted local expert in the neighborhood",
+    "Designed to create more seller conversations and listing opportunities",
+    "You focus on appointments and closings while we handle the outreach",
   ],
 };
 
 export const REZ_SHOWCASE_CIRCLE = {
   kicker: "Your farm, visualized",
-  title: "Pick the ring. See the counts. Then we go execute.",
+  title: "See the homeowners around your listing before the campaign starts.",
   lead:
-    "Agents and ops align on one map: subdivision through ZIP, neighbor totals, and spend—then our team runs the outreach so the story you pitch sellers matches what actually hits the phones.",
+    "Start with subdivision, radius, or ZIP counts around every Just Listed and Just Sold property. Once you choose the market, we run the outreach so the story you tell sellers matches the activity happening in the neighborhood.",
   bullets: [
-    "Radius ladder matches how you explain “who we can reach”",
-    "Counts refresh before you lock budget",
-    "Same flow for listing-led or geo farms — we still call for you",
+    "Radius ladders make it easy to explain neighborhood reach to clients",
+    "Counts refresh before you lock budget and launch a campaign",
+    "The same system works for listing-led outreach or broader geo farming",
   ],
 };
 
@@ -301,8 +365,8 @@ export const VOLUME_PACKAGE_LABELS: readonly string[] = [
 export const POSTER_DATA_PER_HOME_FALLBACK: readonly number[] = [0.1, 0.1, 0.09, 0.08, 0.08];
 
 export const POSTER_PILLARS: readonly { title: string; d: string; icon: "ai" | "live" | "leads" }[] = [
-  { title: "AI powered", d: "Smart targeting & intent scoring", icon: "ai" },
   { title: "Live callers", d: "Real conversations that build trust", icon: "live" },
+  { title: "AI powered", d: "Smart targeting & intent scoring", icon: "ai" },
   { title: "Qualified opportunities", d: "Callbacks & appointments routed to you", icon: "leads" },
 ];
 
@@ -323,13 +387,13 @@ export const POSTER_SHEET_PROMISE =
 
 export const POSTER_TESTIMONIALS_HEADLINE = "What agents say";
 
-/** Illustrative homeowner counts for the radius strip (not a guarantee). */
-export const POSTER_RADIUS_BANDS: readonly { miles: string; homes: string }[] = [
-  { miles: "0.5 mi", homes: "150–300 homeowners" },
-  { miles: "1 mi", homes: "300–600 homeowners" },
-  { miles: "2 mi", homes: "600–1,200 homeowners" },
-  { miles: "3 mi", homes: "1,200–2,500 homeowners" },
-  { miles: "5 mi", homes: "2,500–6,000+ homeowners" },
+/** Illustrative homeowner counts for the radius strip (not a guarantee). Aligns with checkout rings. */
+export const POSTER_RADIUS_BANDS: readonly { id: string; label: string; homes: string }[] = [
+  { id: "subdivision", label: "Subdivision", homes: "128 homeowners" },
+  { id: "q1", label: "¼ mile", homes: "214 homeowners" },
+  { id: "h1", label: "½ mile", homes: "482 homeowners" },
+  { id: "m1", label: "1 mile", homes: "1,126 homeowners" },
+  { id: "zip", label: "Zip Code", homes: "2,845 homeowners" },
 ];
 
 export const LISTING_SALES_PROCESS_STEPS: readonly {
@@ -404,4 +468,4 @@ export const PROCESS_SUMMARY_POINTS: readonly { title: string; d: string }[] = [
 ];
 
 export const PROCESS_FOOTER_CHANNELS =
-  "AI outreach · Live callers · Voicemail · Text follow-up · Lead routing";
+  "Live callers · AI outreach · Voicemail · Text follow-up · Lead routing";

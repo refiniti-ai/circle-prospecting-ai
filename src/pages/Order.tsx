@@ -15,6 +15,7 @@ import {
   type PlanId,
 } from "../lib/pricing";
 import { fetchOrderById, startCheckout } from "../lib/apiClient";
+import { notifyError, notifyInfo } from "../lib/notify";
 
 const RADIUS_ORDER: RadiusId[] = ["subdivision", "q1", "h1", "m1", "zip"];
 const LISTING_PREVIEW =
@@ -34,7 +35,6 @@ export function Order() {
   const [radius, setRadius] = useState<RadiusId>("h1");
   const [plan, setPlan] = useState<PlanId>("pro");
   const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [unconfigured, setUnconfigured] = useState<{
     message: string;
     amountCents: number;
@@ -49,7 +49,6 @@ export function Order() {
       }
       setState({ status: "loading" });
       setUnconfigured(null);
-      setCheckoutError(null);
       try {
         const listing = await fetchOrderById(id, ac.signal);
         setState({ status: "ready", listing, offline: false });
@@ -74,6 +73,16 @@ export function Order() {
     return () => ac.abort();
   }, [id]);
 
+  useEffect(() => {
+    if (state.status !== "error" || state.code === "not_found") return;
+    notifyError(state.message, { id: "order-page-error" });
+  }, [state]);
+
+  useEffect(() => {
+    if (!canceled) return;
+    notifyInfo("Checkout was canceled. You can adjust options and try again.", { id: "order-checkout-canceled" });
+  }, [canceled]);
+
   const listing = state.status === "ready" ? state.listing : null;
   const homeCount = listing ? listing.radii[radius].count : 0;
   const unit = getUnitPriceWithTiers(pricingTiers, homeCount, plan);
@@ -83,7 +92,6 @@ export function Order() {
   async function onCheckout() {
     if (!id || !listing) return;
     setCheckoutBusy(true);
-    setCheckoutError(null);
     setUnconfigured(null);
     try {
       const r = await startCheckout({ orderId: String(listing.id), plan, radius });
@@ -95,7 +103,7 @@ export function Order() {
         setUnconfigured({ message: r.message, amountCents: r.amountCents });
       }
     } catch (e) {
-      setCheckoutError(e instanceof Error ? e.message : "Checkout failed");
+      notifyError(e instanceof Error ? e.message : "Checkout failed");
     } finally {
       setCheckoutBusy(false);
     }
@@ -150,7 +158,7 @@ export function Order() {
           <div className="container page-narrow">
             <div className="page-center-card">
               <h1 className="page-h1">Something went wrong</h1>
-              <p className="cp-alert cp-alert--error" style={{ textAlign: "left" }}>
+              <p className="muted" style={{ textAlign: "left", marginTop: "0.5rem" }}>
                 {state.message}
               </p>
               <p style={{ marginTop: "1.25rem" }}>
@@ -188,8 +196,6 @@ export function Order() {
                 is running and <code className="cp-kbd">npm run dev</code> includes the server, or set <code className="cp-kbd">ORDER_UPSTREAM_URL</code>.
               </p>
             )}
-            {canceled && <p className="cp-alert cp-alert--info" style={{ marginBottom: "1rem" }}>Checkout was canceled. You can adjust options and try again.</p>}
-
             <div className="order-stepper">
               {[
                 "Select Targeting",
@@ -261,7 +267,7 @@ export function Order() {
             <section className="section-surface" style={{ marginTop: "1rem" }}>
               <h2 className="premium-h2" style={{ fontSize: "1.05rem" }}>Step 2: Choose your plan</h2>
               <div className="order-plan-grid">
-                {(["ai", "live", "pro"] as const).map((p) => {
+                {(["live", "ai", "pro"] as const).map((p) => {
                   const active = p === plan;
                   const rate = getUnitPriceWithTiers(pricingTiers, homeCount, p);
                   return (
@@ -312,7 +318,6 @@ export function Order() {
                   the API to enable live checkout).
                 </p>
               )}
-              {checkoutError && <p className="cp-alert cp-alert--error" style={{ marginTop: "0.85rem" }}>{checkoutError}</p>}
               <div className="order-cta-row">
                 <div className="order-cta-meta">Secure checkout • Cancel anytime</div>
                 <button

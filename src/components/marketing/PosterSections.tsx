@@ -3,12 +3,12 @@ import { MarketingBrandMark } from "./MarketingBrandMark";
 import { contactEmail } from "../../lib/siteConfig";
 import { formatCurrency, type CampaignTier } from "../../lib/pricing";
 import { usePricingTiers } from "../../context/PricingTiersContext";
+import { TargetingRadiusStrip } from "./TargetingRadiusStrip";
 import {
   LISTING_SALES_PROCESS_STEPS,
   OPPORTUNITY_COUNT_DEMO,
   POSTER_DATA_PER_HOME_FALLBACK,
   POSTER_PILLARS,
-  POSTER_RADIUS_BANDS,
   POSTER_SHEET_BENEFITS,
   POSTER_SHEET_PROMISE,
   POSTER_SHEET_QUOTE,
@@ -125,16 +125,16 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
 
   const columns = [
     {
-      key: "ai" as const,
-      title: "AI outreach",
-      accent: "var(--rz-poster-ai)",
-      blurb: "Scaled touches — calls, voicemail & SMS where configured.",
-    },
-    {
       key: "live" as const,
       title: "Live callers",
       accent: "var(--rz-poster-live)",
       blurb: "U.S.-based reps for dialogue and qualification.",
+    },
+    {
+      key: "ai" as const,
+      title: "AI outreach",
+      accent: "var(--rz-poster-ai)",
+      blurb: "Scaled touches — calls, voicemail & SMS where configured.",
     },
     {
       key: "pro" as const,
@@ -182,6 +182,8 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
             <p className="rz-poster-callout-sub">Built for agents who want execution — not another DIY dialer.</p>
           </div>
         </header>
+
+        <TargetingRadiusStrip />
 
         <ul className="rz-poster-pillars" aria-label="What powers the program">
           {POSTER_PILLARS.map((p) => (
@@ -241,23 +243,9 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
         </div>
 
         <p className="rz-poster-data-note">
-          Data / export column shows typical list-only planning rates — confirm lane availability and final price before purchase. AI, live, and
+          Data / export column shows typical list-only planning rates — confirm lane availability and final price before purchase. Live, AI, and
           hybrid columns sync to your live tier grid when the pricing API is connected.
         </p>
-
-        <div className="rz-poster-radius">
-          <h3 className="rz-poster-radius-h">Choose your targeting radius</h3>
-          <p className="rz-poster-radius-lead">Illustrative homeowner counts — your map and filters set the real ring at checkout.</p>
-          <ul className="rz-poster-radius-row">
-            {POSTER_RADIUS_BANDS.map((b, i) => (
-              <li key={b.miles} className="rz-poster-radius-cell" data-rz-pin={i + 1}>
-                <span className="rz-poster-radius-pin" aria-hidden />
-                <span className="rz-poster-radius-miles">{b.miles}</span>
-                <span className="rz-poster-radius-homes">{b.homes}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
 
         <div className="rz-poster-value-row" aria-label="Why agents use this">
           <div className="rz-poster-value-col rz-poster-value-col--list">
@@ -334,26 +322,13 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
             Refreshing live rates…
           </p>
         ) : null}
-        {error ? (
-          <p className="rz-poster-status rz-poster-status--muted" role="status">
-            Showing bundled default rates — connect the API for live sync.
-          </p>
-        ) : null}
       </div>
     </section>
   );
 }
 
 /** Horizontal “listing → neighborhood” process graphic for How it works. */
-function lowestAiPerHome(tiers: CampaignTier[]): number {
-  if (!tiers.length) return 0.25;
-  return tiers.reduce((m, t) => Math.min(m, t.rates.ai), Number.POSITIVE_INFINITY);
-}
-
 export function SalesProcessInfographicSection() {
-  const { tiers } = usePricingTiers();
-  const minRate = formatCurrency(lowestAiPerHome(tiers));
-
   const ribbon = [
     { id: "bolt" as const, label: "Listing live" },
     { id: "db" as const, label: "We capture data" },
@@ -474,11 +449,6 @@ export function SalesProcessInfographicSection() {
             </Link>
           </div>
         </div>
-
-        <p className="rz-poster-price-pill" role="note">
-          Published rates from {minRate} / homeowner at the lowest AI band on the live grid — see{" "}
-          <Link to="/campaign-pricing">campaign pricing</Link>.
-        </p>
       </div>
     </section>
   );

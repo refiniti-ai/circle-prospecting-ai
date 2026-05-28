@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { contactEmail } from "../lib/siteConfig";
 import { SeoHead } from "../components/SeoHead";
@@ -6,7 +6,8 @@ import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { apiBase } from "../lib/apiBase";
 import { clearPendingCheckoutSessionId, rememberCheckoutSessionId } from "../lib/checkoutSessionBridge";
-import { setClientPasswordFromSession } from "../lib/leadsApi";
+import { setClientPasswordFromSession, syncPaidCheckoutSession } from "../lib/leadsApi";
+import { notifyError, notifyWarning } from "../lib/notify";
 
 const TOKEN_KEY = "cpai_dash_jwt";
 
@@ -16,6 +17,8 @@ type CheckoutConfirmation = {
   checkoutType: string;
   paymentStatus: string;
   customerEmail: string | null;
+  /** True when this checkout email already has a dashboard password (repeat buyer). */
+  dashboardAccountExists?: boolean;
   currency: string;
   amountTotalCents: number | null;
   lineItems: { description: string; quantity: number }[];
@@ -26,18 +29,22 @@ export function OrderSuccess() {
   const [sp] = useSearchParams();
   const sessionId = sp.get("session_id");
   const [info, setInfo] = useState<CheckoutConfirmation | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(Boolean(sessionId));
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
-  const [pwErr, setPwErr] = useState<string | null>(null);
   const [pwBusy, setPwBusy] = useState(false);
+  const syncWarnedRef = useRef(false);
 
   useEffect(() => {
     if (sessionId) rememberCheckoutSessionId(sessionId);
   }, [sessionId]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      setConfirmLoading(false);
+      return;
+    }
+    setConfirmLoading(true);
     const ac = new AbortController();
     fetch(`${apiBase()}/api/checkout/confirmation?session_id=${encodeURIComponent(sessionId)}`, { signal: ac.signal })
       .then(async (r) => {
@@ -46,32 +53,64 @@ export function OrderSuccess() {
       })
       .then((data) => {
         setInfo(data);
-        setError(null);
       })
       .catch((e: unknown) => {
         if (e instanceof Error && e.name === "AbortError") return;
-        setError("Could not load full confirmation details.");
+        notifyWarning("Could not load full confirmation details.", { id: "order-success-confirm" });
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setConfirmLoading(false);
       });
     return () => ac.abort();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || !info || info.paymentStatus !== "paid") return;
+    const storageKey = `cpai_sync_paid_${sessionId}`;
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(storageKey)) return;
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(storageKey, "1");
+    } catch {
+      /* private mode — still attempt sync (idempotent) */
+    }
+    syncPaidCheckoutSession(sessionId).catch((err) => {
+      try {
+        if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(storageKey);
+      } catch {
+        /* ignore */
+      }
+      if (!syncWarnedRef.current) {
+        syncWarnedRef.current = true;
+        const detail = err instanceof Error ? err.message : "Network or server error";
+        notifyWarning(
+          `Could not confirm your order on the server (${detail}). Refresh this page or open the dashboard after logging in. If it still missing, contact support with your order ID.`,
+          { id: "order-success-sync" }
+        );
+      }
+    });
+  }, [sessionId, info]);
 
   const total =
     info?.amountTotalCents == null
       ? null
       : (info.amountTotalCents / 100).toLocaleString("en-US", { style: "currency", currency: (info.currency || "usd").toUpperCase() });
 
-  const showLeadPasswordSetup = Boolean(sessionId && (!info || info.checkoutType === "lead_pack"));
+  const showLeadPasswordSetup = Boolean(
+    sessionId &&
+      info &&
+      info.checkoutType === "lead_pack" &&
+      !info.dashboardAccountExists
+  );
 
   async function onCreatePassword(e: React.FormEvent) {
     e.preventDefault();
     if (!sessionId) return;
-    setPwErr(null);
     if (password.length < 8) {
-      setPwErr("Use at least 8 characters for your password.");
+      notifyError("Use at least 8 characters for your password.");
       return;
     }
     if (password !== password2) {
-      setPwErr("Passwords do not match.");
+      notifyError("Passwords do not match.");
       return;
     }
     setPwBusy(true);
@@ -81,7 +120,7 @@ export function OrderSuccess() {
       clearPendingCheckoutSessionId();
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setPwErr(err instanceof Error ? err.message : "Could not save password.");
+      notifyError(err instanceof Error ? err.message : "Could not save password.");
     } finally {
       setPwBusy(false);
     }
@@ -125,10 +164,31 @@ export function OrderSuccess() {
                 <Link to="/login" className="btn btn-primary">
                   Log in
                 </Link>
+                <Link to="/dashboard" className="btn btn-ghost">
+                  Open dashboard
+                </Link>
                 <Link to="/" className="btn btn-ghost">
                   Back to home
                 </Link>
               </div>
+
+              {sessionId &&
+              info?.checkoutType === "lead_pack" &&
+              info.dashboardAccountExists &&
+              !confirmLoading ? (
+                <p className="muted" style={{ marginTop: "1rem", fontSize: "0.9rem", lineHeight: 1.5, textAlign: "left" }}>
+                  You already have a dashboard for <strong>{info.customerEmail || "this email"}</strong>.{" "}
+                  <strong>Log in</strong> with your existing password to see this order — no need to create a new one.
+                </p>
+              ) : null}
+
+              {sessionId && info?.paymentStatus === "paid" ? (
+                <p style={{ marginTop: "1rem" }}>
+                  <Link to={`/invoice?session_id=${encodeURIComponent(sessionId)}`} className="btn btn-ghost">
+                    View invoice
+                  </Link>
+                </p>
+              ) : null}
 
               {info ? (
                 <details className="section-surface" style={{ marginTop: "1rem", textAlign: "left" }}>
@@ -157,7 +217,11 @@ export function OrderSuccess() {
                   </div>
                 </details>
               ) : null}
-              {error ? <p className="cp-alert cp-alert--warn">{error}</p> : null}
+              {sessionId && confirmLoading ? (
+                <p className="muted" style={{ marginTop: "1.25rem", fontSize: "0.9rem" }}>
+                  Loading order details…
+                </p>
+              ) : null}
 
               {showLeadPasswordSetup ? (
                 <div className="section-surface" style={{ marginTop: "1.5rem", textAlign: "left" }}>
@@ -195,7 +259,6 @@ export function OrderSuccess() {
                         required
                       />
                     </label>
-                    {pwErr ? <p className="cp-alert cp-alert--error">{pwErr}</p> : null}
                     <button type="submit" className="btn btn-primary" disabled={pwBusy}>
                       {pwBusy ? "Saving…" : "Save password & open dashboard"}
                     </button>

@@ -23,6 +23,7 @@ async function postJson(url: string, body: unknown, headers?: Record<string, str
  */
 export async function upsertGhlContactAndOpportunity(args: {
   orderId: string;
+  mls: string;
   address: string;
   agentName: string;
   email: string;
@@ -41,6 +42,9 @@ export async function upsertGhlContactAndOpportunity(args: {
   }
 
   const auth = token ? { Authorization: `Bearer ${token}` } : undefined;
+  const siteBase = (process.env.APP_PUBLIC_URL || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+  const quoteUrl = `${siteBase}/quote?order=${encodeURIComponent(args.orderId)}&mls=${encodeURIComponent(args.mls)}&campaign=just_listed`;
+  const buyLeadsUrl = `${siteBase}/buy-leads?mls=${encodeURIComponent(args.mls)}&order=${encodeURIComponent(args.orderId)}`;
 
   const contactPayload = {
     firstName: args.agentName,
@@ -50,7 +54,10 @@ export async function upsertGhlContactAndOpportunity(args: {
     source: "Circle Prospecting AI",
     customFields: {
       orderId: args.orderId,
+      mls: args.mls,
       listingAddress: `${args.address}, ${args.cityStateZip}`,
+      quoteUrl,
+      buyLeadsUrl,
     },
   };
   const contact = await postJson(contactUrl, contactPayload, auth);
@@ -63,7 +70,10 @@ export async function upsertGhlContactAndOpportunity(args: {
     contactId,
     customData: {
       orderId: args.orderId,
+      mls: args.mls,
       address: `${args.address}, ${args.cityStateZip}`,
+      quoteUrl,
+      buyLeadsUrl,
     },
   };
   const opp = await postJson(oppUrl, oppPayload, auth);

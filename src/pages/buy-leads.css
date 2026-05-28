@@ -1,0 +1,484 @@
+/* Buy Leads — responsive layout (all breakpoints) */
+
+.buy-page {
+  overflow-x: clip;
+}
+
+.buy-page .buy-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 1180px;
+}
+
+.buy-page .buy-grid > * {
+  min-width: 0;
+}
+
+.buy-page .section-surface.buy-card {
+  padding: clamp(1rem, 2.5vw, 1.75rem);
+}
+
+/* —— Listing / agent search (Phase 1 + 2) —— */
+.buy-search {
+  margin-bottom: 1.25rem;
+}
+
+.buy-search-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.buy-search-tab {
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(5, 12, 26, 0.12);
+  background: #fff;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--rz-text-muted, #64748b);
+  cursor: pointer;
+}
+
+.buy-search-tab.is-active {
+  border-color: rgba(0, 122, 255, 0.35);
+  background: rgba(0, 122, 255, 0.08);
+  color: var(--cp-blue, #0066ff);
+}
+
+.buy-search-tab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.buy-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.buy-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+}
+
+.buy-search-field {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.buy-search-btn {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+.buy-search-or {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.buy-search-hits {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid rgba(5, 12, 26, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.buy-search-hit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: none;
+  border-bottom: 1px solid rgba(5, 12, 26, 0.06);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.buy-search-hit:last-child {
+  border-bottom: none;
+}
+
+.buy-search-hit:hover:not(:disabled) {
+  background: rgba(0, 122, 255, 0.06);
+}
+
+.buy-search-hit strong {
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.buy-search-hit span {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.buy-search-status {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+  color: #334155;
+}
+
+.buy-search-status--warn {
+  color: #b45309;
+}
+
+.buy-radius-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.buy-radius-btn {
+  flex: 1 1 calc(33.333% - 0.45rem);
+  min-width: 4.25rem;
+}
+
+.buy-home-slider,
+.buy-home-exact {
+  max-width: 100% !important;
+}
+
+.buy-pricing-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.buy-tier-auto {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.buy-listing-agent span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.buy-opp-table-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* —— Tablet —— */
+@media (max-width: 960px) {
+  .buy-page .buy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .buy-map-preview {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 900px) {
+  .buy-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .buy-pricing-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-inline: -0.25rem;
+    padding-inline: 0.25rem 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .buy-pricing-stack {
+    min-width: min(100%, 520px);
+  }
+}
+
+/* —— Large phone —— */
+@media (max-width: 720px) {
+  .buy-filters-3,
+  .buy-filters-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .buy-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .buy-step-t {
+    font-size: 0.74rem;
+    line-height: 1.25;
+  }
+
+  .buy-step {
+    padding: 0.5rem 0.55rem;
+    align-items: flex-start;
+  }
+
+  .buy-listing-mls {
+    font-size: 1.15rem;
+  }
+
+  .buy-listing-addr {
+    font-size: 0.95rem;
+  }
+
+  .buy-opp-order {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* —— Phone —— */
+@media (max-width: 600px) {
+  .buy-page .page-hero {
+    margin-bottom: 0.85rem;
+  }
+
+  .buy-hero-pill {
+    font-size: 0.7rem;
+    padding: 0.32rem 0.55rem;
+  }
+
+  .buy-map-preview {
+    min-height: 220px;
+  }
+
+  .buy-map-preview .gradient-border {
+    height: 220px !important;
+    min-height: 220px !important;
+  }
+
+  .buy-listing-count-banner__n {
+    font-size: 1.65rem;
+  }
+
+  .buy-pack-grid.buy-home-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .buy-cta-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .buy-cta-row .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .buy-cta-meta {
+    text-align: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .buy-stepper {
+    grid-template-columns: 1fr;
+  }
+
+  .buy-step {
+    align-items: center;
+  }
+
+  .buy-listing-head__ids {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .buy-listing-sep {
+    display: none;
+  }
+
+  .buy-listing-agent {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .buy-map-stats {
+    max-width: none;
+  }
+
+  /* Opportunity rings → stacked cards */
+  .buy-opp-table thead {
+    display: none;
+  }
+
+  .buy-opp-table,
+  .buy-opp-table tbody,
+  .buy-opp-table tr,
+  .buy-opp-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .buy-opp-table tr {
+    border: 1px solid var(--border, rgba(15, 23, 42, 0.12));
+    border-radius: 12px;
+    margin-bottom: 0.65rem;
+    padding: 0.35rem 0.5rem 0.65rem;
+    background: #fff;
+  }
+
+  .buy-opp-table tr.is-selected {
+    border-color: rgba(0, 122, 255, 0.45);
+    box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.12);
+  }
+
+  .buy-opp-table td {
+    border: none;
+    padding: 0.45rem 0.5rem;
+    text-align: left;
+  }
+
+  .buy-opp-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted, #64748b);
+    margin-bottom: 0.2rem;
+  }
+
+  .buy-opp-col-select {
+    text-align: left;
+  }
+
+  .buy-opp-col-select {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .buy-opp-col-select::before {
+    margin-bottom: 0;
+  }
+
+  .buy-opp-col-action {
+    width: auto;
+    text-align: left;
+    padding-top: 0.55rem;
+  }
+
+  .buy-opp-col-action::before {
+    display: none;
+  }
+
+  .buy-radius-btn {
+    flex: 1 1 calc(50% - 0.45rem);
+  }
+}
+
+@media (max-width: 400px) {
+  .buy-pack-grid.buy-home-presets {
+    grid-template-columns: 1fr;
+  }
+
+  .buy-radius-btn {
+    flex: 1 1 100%;
+  }
+
+  .buy-price-title-btn {
+    font-size: 0.88rem !important;
+    padding: 0.5rem 0.55rem !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .buy-page .premium-h2 {
+    font-size: 1.2rem;
+  }
+}
+
+.buy-listing-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.buy-listing-form__grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.buy-listing-form__grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.buy-listing-form__grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.buy-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.buy-agent-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.buy-agent-card.is-active {
+  border-color: rgba(50, 213, 131, 0.55);
+  box-shadow: 0 0 0 1px rgba(50, 213, 131, 0.25);
+}
+
+.buy-agent-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.buy-agent-card__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.buy-agent-card__cta {
+  width: 100%;
+  margin-top: 0.65rem;
+}
+
+.buy-opp-order-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.buy-opp-order-pair .buy-opp-order {
+  width: 100%;
+  font-size: 0.82rem;
+  padding: 0.45rem 0.55rem;
+}
+
+@media (max-width: 900px) {
+  .buy-agent-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .buy-listing-form__grid--2,
+  .buy-listing-form__grid--3 {
+    grid-template-columns: 1fr;
+  }
+}

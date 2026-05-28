@@ -50,7 +50,7 @@ export function tiersToTableRows(tiers: CampaignTier[]): [string, string, string
       t.max === Number.POSITIVE_INFINITY ? `${t.min.toLocaleString()}+` : `${t.min.toLocaleString()} – ${t.max.toLocaleString()}`;
     const fmt = (x: number) =>
       x.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return [band, fmt(t.rates.ai), fmt(t.rates.live), fmt(t.rates.pro)];
+    return [band, fmt(t.rates.live), fmt(t.rates.ai), fmt(t.rates.pro)];
   });
 }
 

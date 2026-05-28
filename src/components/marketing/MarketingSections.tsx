@@ -9,12 +9,13 @@ import { Link } from "react-router-dom";
 import { useScrollReveal } from "../../hooks/useScrollReveal";
 import { contactEmail } from "../../lib/siteConfig";
 import { ListingMap } from "../ListingMap";
+import { DummyListingMapPreview } from "./DummyListingMapPreview";
 import { SAMPLE_LISTING } from "../../lib/listingData";
-import { StatBarGlyph, IconCheck, IconDoc, PlayIcon } from "./icons";
+import { StatBarGlyph, IconCheck, PlayIcon } from "./icons";
 import { usePricingTiers } from "../../context/PricingTiersContext";
 import { formatCurrency, lowestPerHomeRate, tiersToTableRows } from "../../lib/pricing";
-import { RzPostHeroPhoneMarquee } from "./RzPostHeroPhone";
-import { RzDeliveriesOpportunityList } from "./RzDeliveriesOpportunityList";
+import { HeroDashboardPreview } from "./HeroDashboardPreview";
+import { PlanPickerStillShot } from "./PlanPickerStillShot";
 import {
   MARKETING_IMG,
   STEPS,
@@ -69,11 +70,39 @@ export function RzPrimaryCtas({
   showPricingLink = true,
   showDemoLink = true,
   compact = false,
+  layout = "inline",
 }: {
   showPricingLink?: boolean;
   showDemoLink?: boolean;
   compact?: boolean;
+  /** `mid-band` = stacked primary + paired secondary pills (homepage CTA card). */
+  layout?: "inline" | "mid-band";
 }) {
+  if (layout === "mid-band") {
+    return (
+      <div className="rz-mid-cta-actions">
+        <Link to="/buy-leads" className="btn btn-primary rz-btn-cta-lg rz-mid-cta-primary">
+          Start prospecting your area
+          <span aria-hidden>→</span>
+        </Link>
+        {(showPricingLink || showDemoLink) && (
+          <div className="rz-mid-cta-secondary">
+            {showDemoLink ? (
+              <Link to="/contact" className="btn btn-ghost rz-mid-cta-secondary-btn">
+                Get conversations in my market
+              </Link>
+            ) : null}
+            {showPricingLink ? (
+              <Link to="/campaign-pricing" className="btn btn-ghost rz-mid-cta-secondary-btn">
+                See packages &amp; pricing
+              </Link>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`rz-cta-triple rz-cta-triple--minimal${compact ? " rz-cta-triple--compact" : ""}`}>
       <Link to="/buy-leads" className="btn btn-primary rz-btn-cta-lg">
@@ -86,7 +115,7 @@ export function RzPrimaryCtas({
         </Link>
       ) : null}
       {showDemoLink ? (
-        <Link to="/content" className="btn btn-ghost rz-glass-btn">
+        <Link to="/contact" className="btn btn-ghost rz-glass-btn">
           Get conversations in my market
         </Link>
       ) : null}
@@ -97,16 +126,21 @@ export function RzPrimaryCtas({
 export function RzMidCtaBand({ id }: { id?: string }) {
   const { sentinelRef, revealClassName } = useScrollReveal();
   return (
-    <section id={id} className={`rz-mid-cta-band rz-mid-cta-band--dark ${revealClassName}`} aria-label="Sign up">
+    <section id={id} className={`rz-mid-cta-band rz-mid-cta-band--dark rz-mid-cta-band--premium ${revealClassName}`} aria-label="Sign up">
       <div ref={sentinelRef} className="rz-reveal-sentinel" aria-hidden />
-      <div className="container">
-        <div className={`rz-mid-cta-glass rz-stagger-child`} style={stag(0)}>
-          <h2 className="rz-mid-cta-h">Ready for conversations in your market?</h2>
-          <p className="rz-mid-cta-lead">
-            We target your farm, run AI + live outreach on your behalf, and route callbacks and appointments to you—launch your first campaign
-            and measure meetings, not logins.
-          </p>
-          <RzPrimaryCtas />
+      <div className="rz-mid-cta-bg-glow" aria-hidden />
+      <div className="container rz-mid-cta-container">
+        <div className={`rz-mid-cta-panel rz-stagger-child`} style={stag(0)}>
+          <div className="rz-mid-cta-glass rz-mid-cta-glass--premium">
+            <p className="rz-mid-cta-eyebrow">14-day neighborhood campaign</p>
+            <h2 className="rz-mid-cta-h rz-mid-cta-h--premium">Are you making all the calls you should be?</h2>
+            <p className="rz-mid-cta-lead rz-mid-cta-lead--premium">
+              If not, we can take that off your plate with a Just Listed and Just Sold campaign built to promote you as the trusted local
+              expert in the neighborhood.
+            </p>
+            <RzPrimaryCtas layout="mid-band" />
+            <p className="rz-mid-cta-trust">Secure checkout · Per-home pricing · Live, AI, hybrid &amp; data lanes</p>
+          </div>
         </div>
       </div>
     </section>
@@ -130,26 +164,8 @@ export function RzProductUiSection() {
           </p>
         </div>
         <div className="rz-product-ui-grid">
-          <div className="rz-product-dash rz-glass-panel rz-stagger-child" style={stag(1)}>
-            <div className="rz-pui-dash-top">
-              <span className="rz-pui-dot" />
-              <span className="rz-pui-title">Deliveries</span>
-            </div>
-            <div className="rz-pui-stats">
-              <div className="rz-pui-stat">
-                <span className="rz-pui-stat-n">2</span>
-                <span className="rz-pui-stat-l">Ready exports</span>
-              </div>
-              <div className="rz-pui-stat">
-                <span className="rz-pui-stat-n">1</span>
-                <span className="rz-pui-stat-l">In progress</span>
-              </div>
-              <div className="rz-pui-stat">
-                <span className="rz-pui-stat-n">$0</span>
-                <span className="rz-pui-stat-l">Open balance</span>
-              </div>
-            </div>
-            <RzDeliveriesOpportunityList />
+          <div className="rz-product-plan-still rz-glass-panel rz-stagger-child" style={stag(1)}>
+            <PlanPickerStillShot />
           </div>
           <aside className="rz-product-chat rz-glass-panel rz-stagger-child" style={stag(2)} aria-label="Campaign assistant preview">
             <p className="rz-pui-chat-kicker">In-app guides</p>
@@ -319,22 +335,26 @@ export function RzDifferentiationSection() {
 
 export function RzEditorialHero() {
   return (
-    <section className="rz-hero-v2 rz-hero-v2--stacked rz-reveal-static" aria-label="Introduction">
-      <div className="rz-hero-v2-mesh" aria-hidden />
-      <div className="container rz-hero-v2-stack">
-        <div className="rz-hero-v2-copy rz-hero-v2-copy--center">
+    <section className="rz-hero-v2 rz-hero-banner rz-reveal-static" aria-label="Introduction">
+      <div className="rz-hero-v2-mesh rz-hero-banner-mesh" aria-hidden />
+      <div className="rz-hero-banner-deco" aria-hidden />
+      <div className="container rz-hero-v2-grid">
+        <div className="rz-hero-v2-copy">
           <p className="rz-hero-v2-tag">{BRAND_PLATFORM_LINE}</p>
           <h1 className="rz-hero-v2-headline rz-hero-outcome-h1">
             We Have the Data. The Dialer. And the Callers — To Turn Your Market Into{" "}
             <span className="gradient-text">Conversations</span>.
           </h1>
           <p className="rz-hero-v2-sub">
-            Circle Prospecting AI combines homeowner data, AI dialing, and live callers to contact your market on your behalf — so you get
-            real opportunities: conversations, appointments, and deals (not another “AI tool” login).
+            Circle Prospecting AI combines homeowner data, AI dialing, and live callers to contact your market on your
+            behalf — so you get real opportunities: conversations, appointments, and deals (not another “AI tool”
+            login).
           </p>
           <RzPrimaryCtas />
         </div>
-        <RzPostHeroPhoneMarquee />
+        <div className="rz-hero-v2-visual">
+          <HeroDashboardPreview />
+        </div>
       </div>
     </section>
   );
@@ -448,12 +468,9 @@ export function RzLeadShowcase() {
           <Link to="/campaign-pricing" className="btn btn-ghost rz-btn-soft">
             See packages &amp; pricing
           </Link>
-          <Link to="/content" className="btn btn-ghost rz-btn-soft">
+          <Link to="/contact" className="btn btn-ghost rz-btn-soft">
             Get conversations in my market
           </Link>
-          <a href="/csv/lead-template.csv" download className="btn btn-ghost rz-btn-soft">
-            <IconDoc /> Campaign export layout (CSV)
-          </a>
         </>
       }
     >
@@ -475,33 +492,35 @@ export function RzLeadShowcase() {
 export function RzCircleShowcase() {
   const reveal = useScrollReveal();
   return (
-    <RzShowcaseSplit
-      reveal={reveal}
-      kicker={REZ_SHOWCASE_CIRCLE.kicker}
-      title={REZ_SHOWCASE_CIRCLE.title}
-      lead={REZ_SHOWCASE_CIRCLE.lead}
-      bullets={REZ_SHOWCASE_CIRCLE.bullets}
-      afterBullets={
-        <>
-          <Link to="/order/948" className="btn btn-primary rz-btn-soft">
-            View demo listing order
-            <span aria-hidden>→</span>
-          </Link>
-          <Link to="/campaign-pricing" className="btn btn-ghost rz-btn-soft">
-            See packages &amp; pricing
-          </Link>
-          <Link to="/content" className="btn btn-ghost rz-btn-soft">
-            Launch my first campaign
-          </Link>
-        </>
-      }
-    >
-      <RzBrowserShell>
-        <div className="rz-browser-dash-preview rz-browser-map-wrap">
-          <ListingMap lat={SAMPLE_LISTING.lat} lng={SAMPLE_LISTING.lng} radius="h1" />
-        </div>
-      </RzBrowserShell>
-    </RzShowcaseSplit>
+    <div className="rz-circle-showcase-wrap home-section">
+      <RzShowcaseSplit
+        reveal={reveal}
+        kicker={REZ_SHOWCASE_CIRCLE.kicker}
+        title={REZ_SHOWCASE_CIRCLE.title}
+        lead={REZ_SHOWCASE_CIRCLE.lead}
+        bullets={REZ_SHOWCASE_CIRCLE.bullets}
+        afterBullets={
+          <>
+            <Link to="/order/948" className="btn btn-primary rz-btn-soft">
+              View demo listing order
+              <span aria-hidden>→</span>
+            </Link>
+            <Link to="/campaign-pricing" className="btn btn-ghost rz-btn-soft">
+              See packages &amp; pricing
+            </Link>
+            <Link to="/contact" className="btn btn-ghost rz-btn-soft">
+              Launch my first campaign
+            </Link>
+          </>
+        }
+      >
+        <RzBrowserShell>
+          <div className="rz-browser-dash-preview rz-browser-map-wrap">
+            <DummyListingMapPreview radiusLabel="½ mile radius" />
+          </div>
+        </RzBrowserShell>
+      </RzShowcaseSplit>
+    </div>
   );
 }
 
@@ -746,10 +765,6 @@ export function LeadsProductSection() {
             <Link to="/campaign-pricing" className="btn btn-ghost">
               See packages &amp; pricing
             </Link>
-            <a href="/csv/lead-template.csv" download className="btn btn-ghost" style={{ gap: 8 }}>
-              <IconDoc />
-              Campaign export layout (CSV)
-            </a>
           </div>
         </div>
         <div className="cp-video-block">
@@ -974,7 +989,7 @@ export function CircleProductSection() {
         <div style={{ order: 2 }}>
           <h2 className="rz-section-title">From listing pin to live dials—one link</h2>
           <p className="muted rz-muted" style={{ marginBottom: "1.25rem" }}>
-            Orders open with the property already pinned. Agents choose subdivision-through-ZIP rings, compare data / AI / live lanes, and
+            Orders open with the property already pinned. Agents choose subdivision-through-ZIP rings, compare live / AI / data lanes, and
             checkout—then we contact homeowners so conversations come back to you.
           </p>
           <Link to="/order/948" className="btn btn-primary">
@@ -1068,7 +1083,7 @@ export function BeforeAfterSection() {
 }
 
 const PRICING_INCLUDED = [
-  "Per-homeowner pricing inside the ring—see cost per touch before you buy (AI, live, hybrid, data lanes)",
+  "Per-homeowner pricing inside the ring—see cost per touch before you buy (live, AI, hybrid, data lanes)",
   "Volume packages (Dabble → Scale) with server-verified totals at checkout",
   "Outcome focus: you’re buying executed outreach, not a static CSV",
   "Dashboard + exports for dispositions, callbacks, and CRM handoffs",
@@ -1097,7 +1112,7 @@ export function CampaignPricingSection({ animateOnScroll = false }: { animateOnS
             className={`rz-pricing-rez-lead${animateOnScroll ? " rz-stagger-child" : ""}`}
             {...(animateOnScroll ? { style: stag(2) } : {})}
           >
-            Pick your lane (AI, live, hybrid, data), choose how many homeowners to reach, and see total campaign spend before you pay. Benchmark:
+            Pick your lane (live, AI, hybrid, data), choose how many homeowners to reach, and see total campaign spend before you pay. Benchmark:
             strong programs often see 20+ conversations per ~10,000 homeowners—your market and follow-up will vary. Live grid below matches checkout.
           </p>
         </div>
@@ -1126,8 +1141,8 @@ export function CampaignPricingSection({ animateOnScroll = false }: { animateOnS
               <thead>
                 <tr>
                   <th>Homes in ring</th>
-                  <th>AI / home</th>
                   <th>Live / home</th>
+                  <th>AI / home</th>
                   <th>Pro / home</th>
                 </tr>
               </thead>
@@ -1156,11 +1171,6 @@ export function CampaignPricingSection({ animateOnScroll = false }: { animateOnS
         {loading && !error ? (
           <p className="rz-pricing-rez-status" aria-live="polite">
             Refreshing live rates…
-          </p>
-        ) : null}
-        {error ? (
-          <p className="rz-pricing-rez-status rz-pricing-rez-status--quiet" role="status">
-            Showing default rate card. Connect the pricing API for live sync.
           </p>
         ) : null}
       </div>

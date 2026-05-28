@@ -1,6 +1,5 @@
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { TRUST_BRANDS } from "./marketingData";
 
 function IconPerson() {
   return (
@@ -50,11 +49,10 @@ function IconSpark() {
  */
 export function RzPostHeroPhoneMarquee() {
   const navigate = useNavigate();
-  const doubled = [...TRUST_BRANDS, ...TRUST_BRANDS];
 
   function onSampleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    navigate("/buy-leads");
+    navigate("/buy-leads?mls=TB8502524&campaign=just_listed");
   }
 
   return (
@@ -113,7 +111,7 @@ export function RzPostHeroPhoneMarquee() {
                           Start prospecting your area
                         </h2>
                         <p className="rz-phone-lead">
-                          Tell us who you are—we&apos;ll open targeting, lanes (data / AI / live), and pricing so you can launch conversations
+                          Tell us who you are—we&apos;ll open targeting, lanes (live / AI / data), and pricing so you can launch conversations
                           fast.
                         </p>
                       </div>
@@ -168,22 +166,6 @@ export function RzPostHeroPhoneMarquee() {
         </div>
       </div>
 
-      <div className="rz-phone-marquee-flyover">
-        <div className="rz-phone-marquee-pad">
-          <section
-            aria-label="Roles that run outsourced prospecting and ISA programs"
-            className="rz-logo-marquee rz-logo-marquee--embed"
-          >
-            <div className="rz-logo-marquee-viewport rz-stagger-child">
-              <div className="rz-logo-marquee-track">
-                {doubled.map((b, i) => (
-                  <span key={`${b}-${i}`}>{b}</span>
-                ))}
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
     </div>
   );
 }

@@ -3,8 +3,18 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently -k -n client,api -c cyan,magenta \"npm run dev:vite\" \"npm run dev:api\"",
+    "dev:next": "npm run dev --prefix next-app",
+    "dev:next+api": "concurrently -k -n api,next -c magenta,cyan \"npm run dev:api\" \"npm run dev:next\"",
+    "build:next": "npm run build --prefix next-app",
+    "deploy:firebase:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage",
+    "deploy:gcloud": "gcloud run deploy circle-prospecting-ai-git --source . --region us-central1 --allow-unauthenticated --project circle-prospecting-ai --port 8080",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "deploy:production": "npm run build && firebase deploy --only hosting && npm run deploy:gcloud",
     "dev:vite": "vite",
     "dev:api": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
@@ -19,6 +29,7 @@
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.3",
+    "axios": "^1.16.1",
     "cors": "^2.8.5",
     "csv-parse": "^5.5.6",
     "dotenv": "^16.4.5",
@@ -32,6 +43,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-helmet-async": "^2.0.5",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^6.28.0",
     "stripe": "^17.7.0",
     "tsx": "^4.19.2",

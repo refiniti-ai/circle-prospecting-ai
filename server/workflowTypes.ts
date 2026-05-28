@@ -31,10 +31,18 @@ const agentNested = z.object({
   brokerage: z.string().optional(),
 });
 
+const dualAgentNested = z.object({
+  seller: agentNested.optional(),
+  buyer: agentNested.optional(),
+  sellerAgent: agentNested.optional(),
+  buyerAgent: agentNested.optional(),
+});
+
 export const inboundNewListingSchema = z
   .object({
     listing: listingNested.optional(),
     agent: agentNested.optional(),
+    agents: dualAgentNested.optional(),
     radiusCounts: radiusCountsSchema.optional(),
     // flat payload compatibility
     internalId: z.coerce.number().int().positive().optional(),

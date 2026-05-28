@@ -1,11 +1,21 @@
 import { apiBase } from "./apiBase";
 import { type LeadServiceLine, type LeadTierId } from "./leadPricing";
 
+function isLiveFirebaseHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname;
+  return h.endsWith(".web.app") || h.endsWith(".firebaseapp.com");
+}
+
 function assertJsonResponse(r: Response, context: string): void {
   const ct = r.headers.get("content-type") || "";
   if (ct.includes("text/html")) {
+    const live =
+      import.meta.env.PROD && isLiveFirebaseHost()
+        ? " On production this usually means the API on Cloud Run is not updated (redeploy with the latest server) or /api is not reaching Cloud Run."
+        : "";
     throw new Error(
-      `${context}: the server returned a web page instead of API data. If you use Firebase Hosting (e.g. port 5000) without a reverse proxy, set VITE_API_BASE_URL to your running API (see .env.example) and rebuild—or run \`npm run dev\` so Vite proxies /api to the API.`
+      `${context}: received a web page instead of JSON.${live} For local dev, run the API and use VITE_API_BASE_URL or npm run dev (see .env.example).`
     );
   }
 }
@@ -31,6 +41,8 @@ export type LeadCheckoutContext = {
   requestedLeads?: number;
   /** Just listed vs just sold — neighborhood campaign framing (Stripe metadata). */
   campaignType?: CampaignPropertyType;
+  /** Buyer vs seller agent placing this order (dual-agent listings). */
+  agentRole?: "buyer" | "seller";
 };
 
 export async function startLeadCheckout(
@@ -52,7 +64,16 @@ export async function startLeadCheckout(
     const j = (await r.json()) as { message?: string };
     throw new Error(j.message || "Stripe is not configured on the server");
   }
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string };
+      if (typeof j.message === "string" && j.message.trim()) msg = j.message;
+    } catch {
+      /* use raw body */
+    }
+    throw new Error(msg.trim() || "Checkout failed");
+  }
   return (await r.json()) as { url: string; sessionId: string; unitAmountCents: number };
 }
 
@@ -70,6 +91,45 @@ export async function fetchLeadCount(request: LeadCountRequest, signal?: AbortSi
     baseAvailableInInventory: number;
     inventoryUpdatedAt: string;
   };
+}
+
+export type ContactFormPayload = {
+  name: string;
+  email: string;
+  phone?: string;
+  message: string;
+  /** Honeypot — leave empty */
+  company?: string;
+};
+
+export async function submitContactForm(payload: ContactFormPayload) {
+  const r = await fetch(`${apiBase()}/api/public/contact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  assertJsonResponse(r, "Contact");
+  if (r.status === 503) {
+    let msg = "Email is not configured on the server.";
+    try {
+      const j = (await r.json()) as { message?: string };
+      if (typeof j.message === "string" && j.message.trim()) msg = j.message;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string };
+      if (typeof j.message === "string" && j.message.trim()) msg = j.message;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg.trim() || "Could not send message.");
+  }
+  return (await r.json()) as { ok: true };
 }
 
 export async function clientLogin(email: string, password: string) {
@@ -257,6 +317,40 @@ export async function setClientPasswordFromSession(sessionId: string, password: 
   return (await r.json()) as { token: string; email: string };
 }
 
+/** Ensures Firestore purchase row + fulfillment side effects (idempotent). Call from thank-you when payment is paid. */
+export async function syncPaidCheckoutSession(sessionId: string) {
+  let r: Response;
+  try {
+    r = await fetch(`${apiBase()}/api/checkout/sync-paid-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ session_id: sessionId.trim() }),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!raw || raw === "Failed to fetch" || raw.includes("NetworkError") || raw.includes("Load failed")) {
+      throw new Error(
+        "Could not reach the API (network or CORS). Redeploy Cloud Run after CORS updates, or confirm /api/health on your API returns JSON."
+      );
+    }
+    throw e;
+  }
+  assertJsonResponse(r, "Sync paid checkout");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string; paymentStatus?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "not_paid" && j.paymentStatus) msg = `Payment not complete yet (${j.paymentStatus}).`;
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not sync purchase");
+  }
+  return (await r.json()) as { ok: true; orderNumber: string };
+}
+
 export type LeadClaimError = Error & { code?: string };
 
 /** True when the server had no stored purchase matching email + phone (try session-id claim if available). */
@@ -428,7 +522,9 @@ export type MyPurchaseRow = {
   targetingSummary?: string | null;
   /** Server-computed label for completed checkouts in this app */
   paymentStatus?: string;
+  /** Order / fulfillment label: lead packs show Processing until admin marks complete */
   orderStatus?: string;
+  leadWorkStatus?: "pending" | "completed" | null;
 };
 
 export async function fetchMyPurchases(token: string) {
@@ -486,12 +582,129 @@ export type AdminPurchaseRow = {
   leadTier?: string | null;
   requestedLeads?: number | null;
   targetingSummary?: string | null;
+  leadWorkStatus?: "pending" | "completed" | null;
 };
 
 export async function fetchAdminPurchases(adminKey: string) {
   const r = await fetch(`${apiBase()}/api/admin/purchases`, {
-    headers: { Authorization: `Bearer ${adminKey}` },
+    headers: { Authorization: `Bearer ${adminKey}`, Accept: "application/json" },
   });
+  assertJsonResponse(r, "Admin purchases");
   if (!r.ok) throw new Error("purchases");
   return (await r.json()) as { purchases: AdminPurchaseRow[] };
+}
+
+export async function adminSetPurchaseLeadWorkStatus(
+  adminKey: string,
+  sessionId: string,
+  status: "pending" | "completed"
+) {
+  /** Fixed path + body (sessionId not in URL): same pattern as client-password-reset-link; avoids HTML SPA responses from edges mishandling long paths. */
+  const r = await fetch(`${apiBase()}/api/admin/lead-work`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ sessionId, status }),
+  });
+  assertJsonResponse(r, "Lead work status");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not update status");
+  }
+  return (await r.json()) as { ok: true; sessionId: string; status: "pending" | "completed" };
+}
+
+/** When email is not configured, admins copy this URL and send it to the client manually. */
+export async function adminCreateClientPasswordResetLink(adminKey: string, email: string) {
+  const r = await fetch(`${apiBase()}/api/admin/client-password-reset-link`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  assertJsonResponse(r, "Client password reset link");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "not_found") msg = j.message || "No account for that email.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not create link");
+  }
+  return (await r.json()) as { ok: true; link: string; expiresInMinutes: number };
+}
+
+/** Authenticated admin: verify current password, persist new hash (Firestore/file). */
+export async function changeAdminPassword(adminKey: string, currentPassword: string, newPassword: string) {
+  const r = await fetch(`${apiBase()}/api/admin/change-password`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  assertJsonResponse(r, "Admin change password");
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as { message?: string; error?: string };
+      if (j.message) msg = j.message;
+      else if (j.error === "invalid_current_password") msg = j.message || "Current password is incorrect.";
+      else if (j.error) msg = j.error;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(msg || "Could not change password");
+  }
+  return (await r.json()) as { ok: true };
+}
+
+export async function fetchAdminClientAccounts(adminKey: string) {
+  const r = await fetch(`${apiBase()}/api/admin/client-accounts`, {
+    headers: { Authorization: `Bearer ${adminKey}` },
+  });
+  if (!r.ok) throw new Error("client-accounts");
+  return (await r.json()) as { count: number; emails: string[] };
+}
+
+export type AdminSystemInfo = {
+  status: "ok";
+  time: string;
+  firestore: boolean;
+  inventory: { total: number; available: number; sold: number; updatedAt: string };
+  nodeEnv: string | null;
+  stripe: boolean;
+  webhookSecret: boolean;
+  mail: boolean;
+  mailTransport: string;
+  mailSetupHint?: string;
+  adminEmail: boolean;
+  appPublicUrl: boolean;
+};
+
+export async function fetchAdminSystem(adminKey: string) {
+  const r = await fetch(`${apiBase()}/api/admin/system`, {
+    headers: { Authorization: `Bearer ${adminKey}` },
+  });
+  if (!r.ok) throw new Error("system");
+  return (await r.json()) as AdminSystemInfo;
 }

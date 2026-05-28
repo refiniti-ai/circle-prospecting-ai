@@ -1,11 +1,11 @@
 import { SeoHead, JsonLdOrg, JsonLdSite } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
-import { PricingProductSheetSection, SalesProcessInfographicSection } from "../components/marketing/PosterSections";
+import { PricingProductSheetSection } from "../components/marketing/PosterSections";
+import { BrokerageTrustCarousel } from "../components/marketing/BrokerageTrustCarousel";
 import {
   RzEditorialHero,
   RzPositioningStrip,
-  RzPainSolutionSection,
   RzProofRail,
   RzDifferentiationSection,
   RzProductLanesSection,
@@ -13,10 +13,7 @@ import {
   RzLeadShowcase,
   RzWorkflowRail,
   RzCircleShowcase,
-  RzTestimonialsFeatured,
   RzMidCtaBand,
-  IntegrationsSection,
-  CampaignPricingSection,
   FaqSection,
 } from "../components/marketing/MarketingSections";
 
@@ -25,7 +22,7 @@ export function Home() {
     <>
       <SeoHead
         title="Circle Prospecting AI | We Call Your Market — Conversations & Appointments"
-        description="Done-for-you real estate prospecting: homeowner data, AI dialing, and live callers contact your farm for you—conversations, appointments, and deals. Clear per-home pricing."
+        description="We contact homeowners around your Just Listed and Just Sold properties using live callers, AI calls, and ringless voicemail to promote you as the trusted local expert in the neighborhood."
         path="/"
       />
       <JsonLdSite />
@@ -34,20 +31,16 @@ export function Home() {
         <SiteHeader />
         <main id="main-content" className="home-main rz-home-rez" tabIndex={-1}>
           <RzEditorialHero />
+          <BrokerageTrustCarousel />
           <RzPositioningStrip />
-          <RzPainSolutionSection />
           <RzProofRail />
           <RzDifferentiationSection />
           <RzProductLanesSection />
           <RzProductUiSection />
           <RzLeadShowcase />
           <RzWorkflowRail />
-          <SalesProcessInfographicSection />
           <RzCircleShowcase />
           <PricingProductSheetSection showTestimonialStrip={false} />
-          <RzTestimonialsFeatured />
-          <IntegrationsSection rezLayout darkBand animateOnScroll />
-          <CampaignPricingSection animateOnScroll />
           <RzMidCtaBand id="cta-mid" />
           <FaqSection animateOnScroll dark />
         </main>

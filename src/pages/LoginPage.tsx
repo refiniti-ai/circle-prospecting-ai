@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
+import { notifyError, notifyInfo, notifyWarning } from "../lib/notify";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import {
   clientLogin,
-  completeAdminPasswordReset,
   completeClientPasswordReset,
   fetchAdminSummary,
   loginAdmin,
-  requestAdminPasswordReset,
   requestClientPasswordReset,
 } from "../lib/leadsApi";
 
@@ -26,36 +25,44 @@ export function LoginPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const clientResetToken = searchParams.get("client_reset")?.trim() ?? "";
-  const adminResetToken = searchParams.get("admin_reset")?.trim() ?? "";
-  const tab: Tab = adminResetToken ? "admin" : searchParams.get("tab") === "admin" ? "admin" : "client";
+  const tab: Tab = searchParams.get("tab") === "admin" ? "admin" : "client";
 
   const resetDone = Boolean((location.state as LocationState | null)?.resetDone);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [clientErr, setClientErr] = useState<string | null>(null);
   const [clientBusy, setClientBusy] = useState(false);
 
   const [showClientForgot, setShowClientForgot] = useState(false);
   const [clientForgotEmail, setClientForgotEmail] = useState("");
   const [clientForgotBusy, setClientForgotBusy] = useState(false);
-  const [clientForgotMsg, setClientForgotMsg] = useState<string | null>(null);
 
   const [adminUser, setAdminUser] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
-  const [adminErr, setAdminErr] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminBoot, setAdminBoot] = useState(true);
 
-  const [showAdminForgot, setShowAdminForgot] = useState(false);
-  const [adminForgotEmail, setAdminForgotEmail] = useState("");
-  const [adminForgotBusy, setAdminForgotBusy] = useState(false);
-  const [adminForgotMsg, setAdminForgotMsg] = useState<string | null>(null);
-
   const [newPass, setNewPass] = useState("");
   const [newPass2, setNewPass2] = useState("");
-  const [resetErr, setResetErr] = useState<string | null>(null);
   const [resetBusy, setResetBusy] = useState(false);
+
+  useEffect(() => {
+    if (!resetDone) return;
+    notifyInfo("Password updated. Sign in below.", { id: "login-password-updated" });
+  }, [resetDone]);
+
+  /** Old emailed admin reset links pointed here; strip param and point users to in-dashboard change. */
+  useEffect(() => {
+    const raw = searchParams.get("admin_reset")?.trim();
+    if (!raw) return;
+    notifyInfo(
+      "Admin password is changed from the dashboard after you sign in: Admin → Account tab → Change admin password.",
+      { id: "admin-reset-deprecated" }
+    );
+    const p = new URLSearchParams(searchParams);
+    p.delete("admin_reset");
+    setSearchParams(p, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (tab !== "admin") {
@@ -89,13 +96,12 @@ export function LoginPage() {
 
   async function onClientSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setClientErr(null);
     if (!email.includes("@")) {
-      setClientErr("Enter your email.");
+      notifyError("Enter your email.");
       return;
     }
     if (!password) {
-      setClientErr("Enter your password.");
+      notifyError("Enter your password.");
       return;
     }
     setClientBusy(true);
@@ -104,7 +110,7 @@ export function LoginPage() {
       localStorage.setItem(TOKEN_KEY, r.token);
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setClientErr(err instanceof Error ? err.message : "Could not sign in.");
+      notifyError(err instanceof Error ? err.message : "Could not sign in.");
     } finally {
       setClientBusy(false);
     }
@@ -112,17 +118,18 @@ export function LoginPage() {
 
   async function onClientForgot(e: React.FormEvent) {
     e.preventDefault();
-    setClientForgotMsg(null);
     if (!clientForgotEmail.includes("@")) {
-      setClientForgotMsg("Enter your email.");
+      notifyError("Enter your email.");
       return;
     }
     setClientForgotBusy(true);
     try {
       await requestClientPasswordReset(clientForgotEmail.trim());
-      setClientForgotMsg("If that email has an account, we sent a reset link. Check your inbox.");
+      notifyInfo("If that email has an account, we sent a reset link. Check your inbox.");
     } catch (err) {
-      setClientForgotMsg(err instanceof Error ? err.message : "Could not send email.");
+      const msg = err instanceof Error ? err.message : "Could not send email.";
+      if (/Email is not configured|admin to create/i.test(msg)) notifyWarning(msg);
+      else notifyError(msg);
     } finally {
       setClientForgotBusy(false);
     }
@@ -130,13 +137,12 @@ export function LoginPage() {
 
   async function onClientResetSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setResetErr(null);
     if (newPass.length < 8) {
-      setResetErr("Use at least 8 characters.");
+      notifyError("Use at least 8 characters.");
       return;
     }
     if (newPass !== newPass2) {
-      setResetErr("Passwords do not match.");
+      notifyError("Passwords do not match.");
       return;
     }
     setResetBusy(true);
@@ -144,7 +150,7 @@ export function LoginPage() {
       await completeClientPasswordReset(clientResetToken, newPass);
       navigate("/login", { replace: true, state: { resetDone: true } });
     } catch (err) {
-      setResetErr(err instanceof Error ? err.message : "Could not reset password.");
+      notifyError(err instanceof Error ? err.message : "Could not reset password.");
     } finally {
       setResetBusy(false);
     }
@@ -152,14 +158,13 @@ export function LoginPage() {
 
   async function onAdminSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setAdminErr(null);
     const u = adminUser.trim();
     if (!u) {
-      setAdminErr("Enter your username.");
+      notifyError("Enter your username.");
       return;
     }
     if (!adminPassword) {
-      setAdminErr("Enter your password.");
+      notifyError("Enter your password.");
       return;
     }
     setAdminBusy(true);
@@ -171,51 +176,9 @@ export function LoginPage() {
       setAdminPassword("");
       navigate("/admin", { replace: true });
     } catch (err) {
-      setAdminErr(err instanceof Error ? err.message : "Could not sign in.");
+      notifyError(err instanceof Error ? err.message : "Could not sign in.");
     } finally {
       setAdminBusy(false);
-    }
-  }
-
-  async function onAdminForgot(e: React.FormEvent) {
-    e.preventDefault();
-    setAdminForgotMsg(null);
-    if (!adminForgotEmail.includes("@")) {
-      setAdminForgotMsg("Enter the admin email configured on the server.");
-      return;
-    }
-    setAdminForgotBusy(true);
-    try {
-      await requestAdminPasswordReset(adminForgotEmail.trim());
-      setAdminForgotMsg("If that email matches the server admin inbox, we sent a reset link.");
-    } catch (err) {
-      setAdminForgotMsg(err instanceof Error ? err.message : "Could not send email.");
-    } finally {
-      setAdminForgotBusy(false);
-    }
-  }
-
-  async function onAdminResetSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setResetErr(null);
-    if (newPass.length < 8) {
-      setResetErr("Use at least 8 characters.");
-      return;
-    }
-    if (newPass !== newPass2) {
-      setResetErr("Passwords do not match.");
-      return;
-    }
-    setResetBusy(true);
-    try {
-      await completeAdminPasswordReset(adminResetToken, newPass);
-      const p = new URLSearchParams();
-      p.set("tab", "admin");
-      navigate({ pathname: "/login", search: `?${p.toString()}` }, { replace: true, state: { resetDone: true } });
-    } catch (err) {
-      setResetErr(err instanceof Error ? err.message : "Could not reset password.");
-    } finally {
-      setResetBusy(false);
     }
   }
 
@@ -230,19 +193,13 @@ export function LoginPage() {
       <div className="app-shell rz-shell rz-app">
         <SiteHeader />
         <main id="main-content" tabIndex={-1} className="page-space page-space--tight rzInterior">
-          <div className="container page-narrow" style={{ maxWidth: 520 }}>
+          <div className="container page-narrow login-page-shell" style={{ maxWidth: 520 }}>
             <header className="page-hero">
               <p className="page-breadcrumb">
                 <Link to="/">Home</Link> / Log in
               </p>
               <h1 className="page-h1">Log in</h1>
             </header>
-
-            {resetDone ? (
-              <p className="cp-alert cp-alert--info" style={{ marginTop: "0.5rem" }}>
-                Password updated. Sign in below.
-              </p>
-            ) : null}
 
             <div className="login-tab-bar" role="tablist" aria-label="Login type">
               <button
@@ -300,7 +257,6 @@ export function LoginPage() {
                         required
                       />
                     </label>
-                    {resetErr ? <p className="cp-alert cp-alert--error">{resetErr}</p> : null}
                     <button type="submit" className="btn btn-primary" disabled={resetBusy}>
                       {resetBusy ? "Saving…" : "Save new password"}
                     </button>
@@ -339,7 +295,6 @@ export function LoginPage() {
                           autoComplete="current-password"
                         />
                       </label>
-                      {clientErr ? <p className="cp-alert cp-alert--error">{clientErr}</p> : null}
                       <button type="submit" className="btn btn-primary" disabled={clientBusy}>
                         {clientBusy ? "Signing in…" : "Open my dashboard"}
                       </button>
@@ -350,7 +305,6 @@ export function LoginPage() {
                       style={{ width: "fit-content", textAlign: "left" }}
                       onClick={() => {
                         setShowClientForgot((v) => !v);
-                        setClientForgotMsg(null);
                       }}
                     >
                       {showClientForgot ? "Hide forgot password" : "Forgot password?"}
@@ -362,7 +316,8 @@ export function LoginPage() {
                         style={{ padding: "1rem", display: "grid", gap: "0.75rem", background: "rgba(15,23,42,0.03)" }}
                       >
                         <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-                          We will email you a link to set a new password (if this address has an account).
+                          We email a one-time link when delivery is enabled. Otherwise, ask your admin for a reset link from
+                          the dashboard.
                         </p>
                         <input
                           type="email"
@@ -375,15 +330,6 @@ export function LoginPage() {
                         <button type="submit" className="btn btn-ghost" disabled={clientForgotBusy}>
                           {clientForgotBusy ? "Sending…" : "Send reset link"}
                         </button>
-                        {clientForgotMsg ? (
-                          <p
-                            className={
-                              clientForgotMsg.includes("inbox") ? "cp-alert cp-alert--info" : "cp-alert cp-alert--error"
-                            }
-                          >
-                            {clientForgotMsg}
-                          </p>
-                        ) : null}
                       </form>
                     ) : null}
                   </div>
@@ -407,47 +353,6 @@ export function LoginPage() {
                   <p className="muted" style={{ marginTop: "1rem" }}>
                     Checking session…
                   </p>
-                ) : adminResetToken ? (
-                  <form
-                    onSubmit={onAdminResetSubmit}
-                    className="section-surface"
-                    style={{ padding: "1.25rem", display: "grid", gap: "1rem", marginTop: "0.75rem" }}
-                  >
-                    <p className="muted" style={{ margin: 0, fontSize: "0.9rem", lineHeight: 1.5 }}>
-                      Choose a new admin password. After this, sign in with your username and this password.
-                    </p>
-                    <label className="cp-form-grid">
-                      <span className="muted-label">New password</span>
-                      <input
-                        type="password"
-                        className="premium-input"
-                        value={newPass}
-                        onChange={(e) => setNewPass(e.target.value)}
-                        autoComplete="new-password"
-                        minLength={8}
-                        required
-                      />
-                    </label>
-                    <label className="cp-form-grid">
-                      <span className="muted-label">Confirm password</span>
-                      <input
-                        type="password"
-                        className="premium-input"
-                        value={newPass2}
-                        onChange={(e) => setNewPass2(e.target.value)}
-                        autoComplete="new-password"
-                        minLength={8}
-                        required
-                      />
-                    </label>
-                    {resetErr ? <p className="cp-alert cp-alert--error">{resetErr}</p> : null}
-                    <button type="submit" className="btn btn-primary" disabled={resetBusy}>
-                      {resetBusy ? "Saving…" : "Save new admin password"}
-                    </button>
-                    <Link to="/login?tab=admin" className="link-btn" style={{ width: "fit-content" }}>
-                      Cancel — back to sign in
-                    </Link>
-                  </form>
                 ) : (
                   <div
                     className="section-surface"
@@ -478,60 +383,36 @@ export function LoginPage() {
                           disabled={adminBusy}
                         />
                       </label>
-                      {adminErr ? <p className="cp-alert cp-alert--error">{adminErr}</p> : null}
+                      <p
+                        className="muted"
+                        style={{
+                          margin: 0,
+                          fontSize: "0.8rem",
+                          lineHeight: 1.5,
+                          padding: "0.65rem 0.85rem",
+                          borderRadius: 12,
+                          background: "rgba(15, 23, 42, 0.04)",
+                          border: "1px solid rgba(15, 23, 42, 0.08)",
+                        }}
+                      >
+                        <strong style={{ color: "var(--text, #0f172a)" }}>Demo / test:</strong> username{" "}
+                        <code className="cp-kbd">admin</code> · password <code className="cp-kbd">changeme</code>
+                        <span style={{ display: "block", marginTop: "0.35rem", fontSize: "0.76rem", opacity: 0.9 }}>
+                          Default from <code className="cp-kbd">.env</code> — set a strong password on the server for production.
+                          After signing in, use <strong>Admin → Account</strong> to rotate it.
+                        </span>
+                      </p>
                       <button type="submit" className="btn btn-primary" disabled={adminBusy}>
                         {adminBusy ? "Signing in…" : "Open admin dashboard"}
                       </button>
                     </form>
-                    <button
-                      type="button"
-                      className="link-btn"
-                      style={{ width: "fit-content", textAlign: "left" }}
-                      onClick={() => {
-                        setShowAdminForgot((v) => !v);
-                        setAdminForgotMsg(null);
-                      }}
-                    >
-                      {showAdminForgot ? "Hide forgot password" : "Forgot password?"}
-                    </button>
-                    {showAdminForgot ? (
-                      <form
-                        onSubmit={onAdminForgot}
-                        className="section-surface"
-                        style={{ padding: "1rem", display: "grid", gap: "0.75rem", background: "rgba(15,23,42,0.03)" }}
-                      >
-                        <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-                          Enter the admin contact email configured for your site. If it matches our records, we will
-                          email a reset link.
-                        </p>
-                        <input
-                          type="email"
-                          className="premium-input"
-                          placeholder="Admin email"
-                          value={adminForgotEmail}
-                          onChange={(e) => setAdminForgotEmail(e.target.value)}
-                          disabled={adminForgotBusy}
-                        />
-                        <button type="submit" className="btn btn-ghost" disabled={adminForgotBusy}>
-                          {adminForgotBusy ? "Sending…" : "Send reset link"}
-                        </button>
-                        {adminForgotMsg ? (
-                          <p
-                            className={
-                              adminForgotMsg.includes("inbox") ? "cp-alert cp-alert--info" : "cp-alert cp-alert--error"
-                            }
-                          >
-                            {adminForgotMsg}
-                          </p>
-                        ) : null}
-                      </form>
-                    ) : null}
                   </div>
                 )}
               </div>
             )}
           </div>
         </main>
+
         <SiteFooter />
       </div>
       <style>{`
@@ -562,6 +443,20 @@ export function LoginPage() {
           border-color: rgba(0, 122, 255, 0.55);
           color: var(--cp-blue, #007aff);
           box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.12);
+        }
+        .login-page-shell {
+          box-sizing: border-box;
+          padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+          width: 100%;
+        }
+        @media (max-width: 480px) {
+          .login-page-shell .page-h1 {
+            font-size: clamp(1.35rem, 6vw, 1.75rem);
+          }
+          .login-tab {
+            padding: 0.65rem 0.5rem;
+            font-size: 0.88rem;
+          }
         }
       `}</style>
     </>

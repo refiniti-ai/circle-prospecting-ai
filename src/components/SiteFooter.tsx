@@ -27,7 +27,7 @@ export function SiteFooter() {
             <div>
               <p className="rz-footer-rez-col-title">Company</p>
               <nav className="rz-footer-rez-links" aria-label="Company links">
-                <Link to="/content">Contact</Link>
+                <Link to="/contact">Contact</Link>
                 <Link to="/login">Log in</Link>
                 <Link to="/dashboard">Client dashboard</Link>
                 <Link to="/coverage">Areas</Link>
@@ -41,9 +41,6 @@ export function SiteFooter() {
               </nav>
             </div>
           </div>
-          <p className="rz-footer-water-rez" aria-hidden>
-            circle prospecting ai
-          </p>
           <div className="rz-footer-rez-meta">
             <p className="rz-footer-rez-copyright">
               © {y} Circle Prospecting AI · All rights reserved
