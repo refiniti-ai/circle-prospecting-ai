@@ -472,6 +472,156 @@ export async function searchGhlContacts(query: string, limit = 12): Promise<GhlC
     .filter((h) => h.id.length > 0);
 }
 
+function normalizeMlsValue(raw: string | null | undefined): string {
+  return (raw || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+
+async function ghlSearchWithBody(
+  body: Record<string, unknown>,
+  defs: CustomFieldDefinitions,
+  limit: number
+): Promise<GhlContactSearchHit[]> {
+  const token = process.env.GHL_BEARER_TOKEN?.trim();
+  if (!token) throw new Error("ghl_not_configured");
+
+  const searchRes = await axios.post(`${ghlApiBase()}/contacts/search`, body, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Version: ghlApiVersion(),
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    timeout: 25_000,
+    validateStatus: () => true,
+  });
+
+  if (searchRes.status < 200 || searchRes.status >= 300) {
+    const bodyText =
+      typeof searchRes.data === "string"
+        ? searchRes.data.slice(0, 200)
+        : JSON.stringify(searchRes.data).slice(0, 200);
+    throw new Error(`ghl_search_${searchRes.status}: ${bodyText}`);
+  }
+
+  const contacts = Array.isArray(searchRes.data?.contacts)
+    ? (searchRes.data.contacts as Record<string, unknown>[])
+    : Array.isArray(searchRes.data?.data)
+      ? (searchRes.data.data as Record<string, unknown>[])
+      : [];
+
+  return contacts
+    .map((c) => mapSearchHit(c, defs))
+    .filter((h) => h.id.length > 0)
+    .slice(0, limit);
+}
+
+/** Scan recent contacts when filter search is unavailable (MLS is not in GHL text search). */
+async function scanGhlContactsForMls(
+  locationId: string,
+  mlsNorm: string,
+  defs: CustomFieldDefinitions,
+  limit: number
+): Promise<GhlContactSearchHit[]> {
+  const token = process.env.GHL_BEARER_TOKEN?.trim();
+  if (!token) throw new Error("ghl_not_configured");
+
+  const matched: GhlContactSearchHit[] = [];
+  let startAfterId: string | undefined;
+  const pageSize = 100;
+  const maxPages = 15;
+
+  for (let page = 0; page < maxPages && matched.length < limit; page++) {
+    const params: Record<string, string> = {
+      locationId,
+      limit: String(pageSize),
+    };
+    if (startAfterId) params.startAfterId = startAfterId;
+
+    const listRes = await axios.get(`${ghlApiBase()}/contacts/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: ghlApiVersion(),
+        Accept: "application/json",
+      },
+      params,
+      timeout: 25_000,
+      validateStatus: () => true,
+    });
+
+    if (listRes.status < 200 || listRes.status >= 300) break;
+
+    const contacts = Array.isArray(listRes.data?.contacts)
+      ? (listRes.data.contacts as Record<string, unknown>[])
+      : [];
+
+    for (const c of contacts) {
+      const hit = mapSearchHit(c, defs);
+      const hitMls = normalizeMlsValue(hit.mls);
+      if (!hitMls) continue;
+      if (hitMls === mlsNorm || hitMls.includes(mlsNorm) || mlsNorm.includes(hitMls)) {
+        matched.push(hit);
+        if (matched.length >= limit) return matched;
+      }
+    }
+
+    if (contacts.length < pageSize) break;
+    const lastId = String(contacts[contacts.length - 1]?.id || "").trim();
+    if (!lastId || lastId === startAfterId) break;
+    startAfterId = lastId;
+  }
+
+  return matched;
+}
+
+/**
+ * Find GHL contacts by MLS custom field. Text search does not index MLS — we filter
+ * on customFields.mls and fall back to scanning location contacts.
+ */
+export async function searchGhlContactsByMls(mls: string, limit = 12): Promise<GhlContactSearchHit[]> {
+  const token = process.env.GHL_BEARER_TOKEN?.trim();
+  const locationId = ghlLocationId();
+  if (!token || !locationId) throw new Error("ghl_not_configured");
+
+  const mlsNorm = normalizeMlsValue(mls);
+  if (mlsNorm.length < 3) return [];
+
+  const defs = await getGhlCustomFieldDefinitions();
+  const mlsFieldId = defs.keyToId.mls || defs.keyToId.MLS;
+
+  const filterBodies: Record<string, unknown>[] = [];
+  const base = { locationId, page: 1, pageLimit: Math.min(Math.max(limit, 1), 25) };
+
+  if (mlsFieldId) {
+    filterBodies.push({
+      ...base,
+      filters: [{ field: `customFields.${mlsFieldId}`, operator: "eq", value: mlsNorm }],
+    });
+    filterBodies.push({
+      ...base,
+      filters: [{ field: `customFields.${mlsFieldId}`, operator: "contains", value: mlsNorm }],
+    });
+  }
+  filterBodies.push({
+    ...base,
+    filters: [{ field: "customFields.mls", operator: "eq", value: mlsNorm }],
+  });
+
+  for (const body of filterBodies) {
+    try {
+      const hits = await ghlSearchWithBody(body, defs, limit);
+      const matched = hits.filter((h) => {
+        const hitMls = normalizeMlsValue(h.mls);
+        return hitMls === mlsNorm || hitMls.includes(mlsNorm);
+      });
+      if (matched.length > 0) return matched;
+    } catch {
+      /* try next filter shape */
+    }
+  }
+
+  return scanGhlContactsForMls(locationId, mlsNorm, defs, limit);
+}
+
 /** Buy Leads prefill from a GHL contact id. */
 export async function fetchGhlContactPrefill(contactId: string): Promise<GhlContactSearchHit> {
   const c = await fetchGhlContact(contactId);

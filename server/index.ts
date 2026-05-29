@@ -56,6 +56,7 @@ import {
   fetchGhlContact,
   fetchGhlContactPrefill,
   searchGhlContacts,
+  searchGhlContactsByMls,
   updateGhlContactFields,
   asInt,
   PAY_LINK_FIELD_KEYS,
@@ -1006,6 +1007,34 @@ app.get("/api/ghl-contacts/search", generalLimit, async (req: Request, res: Resp
     }
     console.error("ghl_contacts_search", msg);
     res.status(502).json({ error: "ghl_search_failed", message: msg });
+  }
+});
+
+/** Search GHL contacts by MLS custom field (Buy Leads listing tab). */
+app.get("/api/ghl-contacts/search-by-mls", generalLimit, async (req: Request, res: Response) => {
+  const mls = String(req.query.mls || "").trim();
+  if (mls.length < 3) {
+    res.status(400).json({ error: "mls_too_short", message: "Enter a valid MLS number." });
+    return;
+  }
+  if (mls.length > 40) {
+    res.status(400).json({ error: "mls_too_long" });
+    return;
+  }
+  try {
+    const results = await searchGhlContactsByMls(mls, 12);
+    res.json({ ok: true, results });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "search_failed";
+    if (msg === "ghl_not_configured") {
+      res.status(503).json({
+        error: "ghl_not_configured",
+        message: "Set GHL_BEARER_TOKEN and GHL_LOCATION_ID on the server.",
+      });
+      return;
+    }
+    console.error("ghl_contacts_search_by_mls", msg);
+    res.status(502).json({ error: "ghl_mls_search_failed", message: msg });
   }
 });
 

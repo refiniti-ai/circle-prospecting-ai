@@ -45,6 +45,24 @@ export async function searchListingByMls(mls: string, signal?: AbortSignal): Pro
   return fetchOrderById(mls.trim(), signal);
 }
 
+export async function searchGhlContactsByMls(mls: string, signal?: AbortSignal): Promise<GhlContactSearchHit[]> {
+  const r = await fetch(`${apiBase()}/api/ghl-contacts/search-by-mls?mls=${encodeURIComponent(mls.trim())}`, {
+    method: "GET",
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (r.status === 503) {
+    const j = (await r.json()) as { message?: string };
+    throw new Error(j.message || "GHL search is not configured on the server.");
+  }
+  if (!r.ok) {
+    const j = (await r.json().catch(() => ({}))) as { message?: string };
+    throw new Error(j.message || "MLS search failed.");
+  }
+  const j = (await r.json()) as { results?: GhlContactSearchHit[] };
+  return j.results ?? [];
+}
+
 export async function searchGhlContacts(q: string, signal?: AbortSignal): Promise<GhlContactSearchHit[]> {
   const r = await fetch(`${apiBase()}/api/ghl-contacts/search?q=${encodeURIComponent(q.trim())}`, {
     method: "GET",

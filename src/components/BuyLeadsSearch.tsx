@@ -4,6 +4,7 @@ import {
   fetchGhlContactPrefill,
   geocodeAddressLine,
   searchGhlContacts,
+  searchGhlContactsByMls,
   searchListingByMls,
   type GhlContactSearchHit,
 } from "../lib/buyLeadsSearchApi";
@@ -42,6 +43,45 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
     [onError]
   );
 
+  const applyGhlContact = useCallback(
+    async (hit: GhlContactSearchHit, source: "agent" | "listing") => {
+      setBusy(true);
+      setStatus(null);
+      setListingHits([]);
+      setAgentHits([]);
+      try {
+        const full = await fetchGhlContactPrefill(hit.id);
+        const form = ghlHitToListingForm(full);
+        if (full.mls) setMls(full.mls);
+        if (full.listingAddress) setAddressLine(full.listingAddress);
+
+        let geo = { lat: 28.0356, lng: -82.7743, county: "Pinellas" };
+        const geoQuery = listingAddressGeocodeQuery(form) || full.listingAddress?.trim() || "";
+        let mapNote: string | null = null;
+        if (geoQuery.length >= 8) {
+          try {
+            geo = await geocodeAddressLine(geoQuery);
+          } catch {
+            mapNote = "Contact loaded — refine the address if the map looks wrong.";
+          }
+        }
+
+        const draft = buildDraftListingFromForm(form, geo);
+        const label = full.name || "contact";
+        setStatus(
+          mapNote ||
+            `Loaded ${label}${source === "listing" && full.mls ? ` · MLS ${full.mls}` : ""}.`
+        );
+        onResult({ kind: "listing", listing: draft });
+      } catch (e) {
+        reportError(e instanceof Error ? e.message : "Could not load contact.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onResult, reportError]
+  );
+
   const onFindListing = useCallback(async () => {
     const mlsQ = mls.trim();
     const addrQ = addressLine.trim();
@@ -64,19 +104,18 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
           return;
         } catch {
           try {
-            const hits = await searchGhlContacts(mlsQ);
-            const mlsNorm = mlsQ.toUpperCase();
-            const matched = hits.filter((h) => (h.mls || "").toUpperCase().includes(mlsNorm));
-            const toShow = matched.length > 0 ? matched : hits;
-            if (toShow.length > 0) {
-              setListingHits(toShow);
-              setStatus(
-                `${toShow.length} match${toShow.length === 1 ? "" : "es"} for MLS ${mlsQ} — select one below.`
-              );
+            const hits = await searchGhlContactsByMls(mlsQ);
+            if (hits.length > 0) {
+              if (hits.length === 1) {
+                await applyGhlContact(hits[0]!, "listing");
+                return;
+              }
+              setListingHits(hits);
+              setStatus(`${hits.length} matches for MLS ${mlsQ} — select one below.`);
               return;
             }
-          } catch {
-            /* fall through to address or error */
+          } catch (e) {
+            console.warn("[buy-leads] MLS GHL search failed", e);
           }
           if (!addrQ) {
             reportError(`No listing found for MLS ${mlsQ}. Try address search or enter details manually below.`);
@@ -105,7 +144,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [addressLine, mls, onResult, reportError]);
+  }, [addressLine, applyGhlContact, mls, onResult, reportError]);
 
   const onAddressPlace = useCallback(
     (place: ParsedPlaceAddress) => {
@@ -151,45 +190,6 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
       setBusy(false);
     }
   }, [agentQuery, reportError]);
-
-  const applyGhlContact = useCallback(
-    async (hit: GhlContactSearchHit, source: "agent" | "listing") => {
-      setBusy(true);
-      setStatus(null);
-      setListingHits([]);
-      setAgentHits([]);
-      try {
-        const full = await fetchGhlContactPrefill(hit.id);
-        const form = ghlHitToListingForm(full);
-        if (full.mls) setMls(full.mls);
-        if (full.listingAddress) setAddressLine(full.listingAddress);
-
-        let geo = { lat: 28.0356, lng: -82.7743, county: "Pinellas" };
-        const geoQuery = listingAddressGeocodeQuery(form) || full.listingAddress?.trim() || "";
-        let mapNote: string | null = null;
-        if (geoQuery.length >= 8) {
-          try {
-            geo = await geocodeAddressLine(geoQuery);
-          } catch {
-            mapNote = "Contact loaded — refine the address if the map looks wrong.";
-          }
-        }
-
-        const draft = buildDraftListingFromForm(form, geo);
-        const label = full.name || "contact";
-        setStatus(
-          mapNote ||
-            `Loaded ${label}${source === "listing" && full.mls ? ` · MLS ${full.mls}` : ""}.`
-        );
-        onResult({ kind: "listing", listing: draft });
-      } catch (e) {
-        reportError(e instanceof Error ? e.message : "Could not load contact.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [onResult, reportError]
-  );
 
   const onPickAgent = useCallback(
     (hit: GhlContactSearchHit) => {
