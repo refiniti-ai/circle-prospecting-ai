@@ -15,10 +15,13 @@ import {
   startLeadCheckout,
   type CampaignPropertyType,
 } from "../lib/leadsApi";
+import { PromoCodeField } from "../components/PromoCodeField";
 import {
-  LEAD_SERVICE_LINES,
   LEAD_TIERS,
   LEAD_PRICE_MATRIX,
+  checkoutServiceLines,
+  defaultCheckoutServiceLine,
+  isServiceLineHiddenDuringBeta,
   tierFromLeadCount,
   totalCentsForSelection,
   leadCountFitsTier,
@@ -197,9 +200,11 @@ export function BuyLeads() {
   const [campaignType, setCampaignType] = useState<CampaignPropertyType>(
     () => campaignFromUrl ?? "just_listed"
   );
-  const [serviceLine, setServiceLine] = useState<LeadServiceLine>("ai_outreach");
+  const [serviceLine, setServiceLine] = useState<LeadServiceLine>(() => defaultCheckoutServiceLine());
   /** Explicit plan row (Dabble … Scale); click a row in any pricing table to set service + plan. */
   const [selectedTier, setSelectedTier] = useState<LeadTierId>(() => tierFromLeadCount(500));
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const canceledToastShown = useRef(false);
   /** Set when /api returns HTML (e.g. Firebase Hosting without API proxy). */
@@ -236,12 +241,29 @@ export function BuyLeads() {
 
   const tierBandOk = useMemo(() => leadCountFitsTier(requestedLeads, selectedTier), [requestedLeads, selectedTier]);
   const checkoutTotalCents = useMemo(
-    () => totalCentsForSelection(serviceLine, selectedTier, requestedLeads),
-    [serviceLine, selectedTier, requestedLeads]
+    () => totalCentsForSelection(serviceLine, selectedTier, requestedLeads, appliedPromoCode),
+    [serviceLine, selectedTier, requestedLeads, appliedPromoCode]
   );
   const stripeMinLeads = useMemo(
-    () => minLeadsForStripeForTier(serviceLine, selectedTier),
-    [serviceLine, selectedTier]
+    () => minLeadsForStripeForTier(serviceLine, selectedTier, appliedPromoCode),
+    [serviceLine, selectedTier, appliedPromoCode]
+  );
+  const visibleServiceLines = useMemo(() => checkoutServiceLines(), []);
+
+  useEffect(() => {
+    if (isServiceLineHiddenDuringBeta(serviceLine)) {
+      setServiceLine(defaultCheckoutServiceLine());
+    }
+  }, [serviceLine]);
+
+  const handlePromoApply = useCallback(
+    (code: string | null) => {
+      setAppliedPromoCode(code);
+      if (promoInput.trim() && !code) {
+        notifyWarning("Promo code not recognized.");
+      }
+    },
+    [promoInput]
   );
 
   const selectedTierMeta = tierRowMeta(selectedTier);
@@ -793,6 +815,7 @@ export function BuyLeads() {
           requestedLeads,
           campaignType,
           agentRole: orderingAgentRole ?? undefined,
+          promoCode: appliedPromoCode ?? undefined,
         }
       );
       window.location.assign(url);
@@ -1366,7 +1389,7 @@ export function BuyLeads() {
                           matching row below or change homes.{" · "}
                         </>
                       ) : null}
-                      <strong>{formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier))}</strong> per home with{" "}
+                      <strong>{formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier, appliedPromoCode))}</strong> per home with{" "}
                       <strong>{serviceLineLabel(serviceLine)}</strong> →{" "}
                       <strong className="gradient-text">{formatMoneyUsd(checkoutTotalCents / 100)}</strong> estimated total
                     </p>
@@ -1425,7 +1448,7 @@ export function BuyLeads() {
                 </p>
                 <div className="buy-pricing-scroll">
                 <div className="buy-pricing-stack" role="group" aria-label="Plan packages by product">
-                  {LEAD_SERVICE_LINES.map((line) => {
+                  {visibleServiceLines.map((line) => {
                     const serviceSelected = serviceLine === line.id;
                     return (
                       <div key={line.id} className={`buy-pricing-block${serviceSelected ? " is-selected" : ""}`}>
@@ -1461,7 +1484,9 @@ export function BuyLeads() {
                             {LEAD_TIERS.map((tier, idx) => {
                               const planPick = serviceLine === line.id && selectedTier === tier.id;
                               const rowBg = idx % 2 === 1 ? "rgba(15,23,42,0.04)" : "#fff";
-                              const price = LEAD_PRICE_MATRIX[line.id][idx];
+                              const price = appliedPromoCode
+                                ? pricePerLeadUsd(line.id, tier.id, appliedPromoCode)
+                                : LEAD_PRICE_MATRIX[line.id][idx];
                               return (
                                 <tr
                                   key={tier.id}
@@ -1542,7 +1567,7 @@ export function BuyLeads() {
                 <div>
                   <span>Plan band</span>
                   <strong>
-                    {selectedTierMeta.packageLabel} · {formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier))}/home
+                    {selectedTierMeta.packageLabel} · {formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier, appliedPromoCode))}/home
                   </strong>
                 </div>
                 {!listing ? (
@@ -1587,6 +1612,13 @@ export function BuyLeads() {
                     placeholder="+1 (555) 000-0000"
                   />
                 </label>
+                <PromoCodeField
+                  value={promoInput}
+                  onChange={setPromoInput}
+                  onApply={handlePromoApply}
+                  appliedCode={appliedPromoCode}
+                  disabled={busy}
+                />
                 <p style={{ color: "var(--muted)", fontSize: "0.82rem", lineHeight: 1.5, margin: 0 }}>
                   By continuing you agree to our{" "}
                   <Link to="/terms" style={{ color: "var(--accent-cyan)" }}>

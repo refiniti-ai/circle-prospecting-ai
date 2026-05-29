@@ -2,6 +2,19 @@
  * Lead pack pricing matrix (per homeowner USD) — kept in sync with checkout on the server.
  */
 
+import { BETA_PROMO_PRICE_USD, isValidBetaPromoCode } from "./promoCodes";
+
+export {
+  BETA_PROMO_PRICE_USD,
+  checkoutServiceLines,
+  defaultCheckoutServiceLine,
+  isServiceLineHiddenDuringBeta,
+  assertCheckoutServiceLineAllowed,
+  isValidBetaPromoCode,
+  normalizePromoCode,
+  getBetaPromoCode,
+} from "./promoCodes";
+
 export type LeadServiceLine = "ai_outreach" | "live_callers" | "hybrid" | "data_only";
 export type LeadTierId = "dabble" | "starter" | "growth" | "scale";
 
@@ -57,14 +70,20 @@ export function tierRowMeta(tier: LeadTierId) {
   return LEAD_TIERS.find((t) => t.id === tier)!;
 }
 
-export function pricePerLeadUsd(service: LeadServiceLine, tier: LeadTierId): number {
+export function pricePerLeadUsd(service: LeadServiceLine, tier: LeadTierId, promoCode?: string | null): number {
+  if (isValidBetaPromoCode(promoCode)) return BETA_PROMO_PRICE_USD;
   const idx = tierIndex(tier);
   return LEAD_PRICE_MATRIX[service][idx]!;
 }
 
 /** Checkout total from explicitly chosen service line + plan tier + lead count. */
-export function totalCentsForSelection(service: LeadServiceLine, tier: LeadTierId, leadCount: number): number {
-  const unit = pricePerLeadUsd(service, tier);
+export function totalCentsForSelection(
+  service: LeadServiceLine,
+  tier: LeadTierId,
+  leadCount: number,
+  promoCode?: string | null
+): number {
+  const unit = pricePerLeadUsd(service, tier, promoCode);
   return Math.round(leadCount * unit * 100);
 }
 
@@ -76,8 +95,8 @@ export function leadCountFitsTier(count: number, tier: LeadTierId): boolean {
 }
 
 /** Stripe card payments commonly require a minimum charge (e.g. $0.50 USD). */
-export function minLeadsForStripeForTier(service: LeadServiceLine, tier: LeadTierId): number {
-  const centsPerLead = Math.round(pricePerLeadUsd(service, tier) * 100);
+export function minLeadsForStripeForTier(service: LeadServiceLine, tier: LeadTierId, promoCode?: string | null): number {
+  const centsPerLead = Math.round(pricePerLeadUsd(service, tier, promoCode) * 100);
   if (centsPerLead < 1) return 1;
   return Math.max(1, Math.ceil(50 / centsPerLead));
 }

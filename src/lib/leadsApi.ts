@@ -43,6 +43,8 @@ export type LeadCheckoutContext = {
   campaignType?: CampaignPropertyType;
   /** Buyer vs seller agent placing this order (dual-agent listings). */
   agentRole?: "buyer" | "seller";
+  /** Beta promo code — server validates and applies $0.50/home when valid. */
+  promoCode?: string;
 };
 
 export async function startLeadCheckout(
@@ -57,7 +59,20 @@ export async function startLeadCheckout(
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ serviceLine, leadTier, email, phone, ...context }),
+    body: JSON.stringify({
+      serviceLine,
+      leadTier,
+      email,
+      phone,
+      city: context?.city,
+      county: context?.county,
+      zip: context?.zip,
+      radiusMiles: context?.radiusMiles,
+      requestedLeads: context?.requestedLeads,
+      campaignType: context?.campaignType,
+      agentRole: context?.agentRole,
+      promoCode: context?.promoCode,
+    }),
   });
   assertJsonResponse(r, "Checkout");
   if (r.status === 503) {

@@ -18,6 +18,9 @@ import {
   serviceLineLabel,
   tierRowMeta,
   minLeadsForStripeForTier,
+  assertCheckoutServiceLineAllowed,
+  isValidBetaPromoCode,
+  normalizePromoCode,
   type LeadServiceLine,
   type LeadTierId,
 } from "../src/lib/leadPricing.ts";
@@ -869,7 +872,39 @@ const leadCheckout = z.object({
   radiusMiles: z.coerce.number().positive().max(50).optional(),
   campaignType: z.enum(["just_listed", "just_sold"]).optional(),
   agentRole: z.enum(["buyer", "seller"]).optional(),
+  promoCode: z.string().trim().max(40).optional(),
 });
+
+function resolveLeadPackCheckout(
+  serviceLine: LeadServiceLine,
+  leadTier: LeadTierId,
+  homes: number,
+  promoCodeRaw?: string
+):
+  | { ok: true; totalCents: number; promoCode: string | undefined }
+  | { ok: false; status: number; error: string; message: string; minLeads?: number } {
+  const blocked = assertCheckoutServiceLineAllowed(serviceLine);
+  if (blocked) {
+    return { ok: false, status: 400, error: "service_unavailable", message: blocked };
+  }
+  const promoInput = normalizePromoCode(promoCodeRaw);
+  const promoActive = promoInput ? isValidBetaPromoCode(promoInput) : false;
+  if (promoInput && !promoActive) {
+    return { ok: false, status: 400, error: "invalid_promo", message: "Promo code is not valid." };
+  }
+  const promoCode = promoActive ? promoInput : undefined;
+  const totalCents = totalCentsForSelection(serviceLine, leadTier, homes, promoCode);
+  if (totalCents < 50) {
+    return {
+      ok: false,
+      status: 400,
+      error: "below_minimum_charge",
+      message: "Order total is below the card minimum ($0.50). Increase the number of leads.",
+      minLeads: minLeadsForStripeForTier(serviceLine, leadTier, promoCode),
+    };
+  }
+  return { ok: true, totalCents, promoCode };
+}
 
 /**
  * GHL-driven dynamic checkout: contactId + email + plan + amount → Stripe Checkout URL,
@@ -1033,6 +1068,7 @@ const checkoutFromContactBody = z.object({
   leadTier: z.enum(["dabble", "starter", "growth", "scale"]),
   homes: z.coerce.number().int().positive().max(50_000),
   radiusLabel: z.string().trim().max(80).optional(),
+  promoCode: z.string().trim().max(40).optional(),
 });
 
 app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: Response) => {
@@ -1041,17 +1077,18 @@ app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: 
     res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
     return;
   }
-  const { contactId, t, serviceLine, leadTier, homes, radiusLabel } = parsed.data;
+  const { contactId, t, serviceLine, leadTier, homes, radiusLabel, promoCode } = parsed.data;
   if (!verifyPayLinkToken(contactId, t)) {
     res.status(401).json({ error: "invalid_token" });
     return;
   }
 
-  const totalCents = totalCentsForSelection(serviceLine as LeadServiceLine, leadTier as LeadTierId, homes);
-  if (totalCents < 50) {
-    res.status(400).json({ error: "amount_below_minimum", message: "Selected plan total is below $0.50." });
+  const pricing = resolveLeadPackCheckout(serviceLine as LeadServiceLine, leadTier as LeadTierId, homes, promoCode);
+  if (!pricing.ok) {
+    res.status(pricing.status).json({ error: pricing.error, message: pricing.message, minLeads: pricing.minLeads });
     return;
   }
+  const { totalCents, promoCode: activePromo } = pricing;
 
   const sk = process.env.STRIPE_SECRET_KEY?.trim();
   if (!sk) {
@@ -1122,6 +1159,7 @@ app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: 
           zip: contact.fields.zip_code || "",
           mls: contact.fields.mls || "",
           listingAddress: contact.fields.listing_address || "",
+          promoCode: activePromo || "",
         },
       },
       { idempotencyKey: `pay-${contactId}-${homes}-${serviceLine}-${leadTier}-${idem}`.slice(0, 90) }
@@ -1147,7 +1185,7 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
     res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
     return;
   }
-  const { serviceLine, leadTier, email, phone, city, county, zip, radiusMiles, requestedLeads, campaignType, agentRole } =
+  const { serviceLine, leadTier, email, phone, city, county, zip, radiusMiles, requestedLeads, campaignType, agentRole, promoCode } =
     parsed.data;
   const phoneDigits = normalizePhoneDigits(phone);
   if (phoneDigits.length < 10) {
@@ -1169,15 +1207,16 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
     });
     return;
   }
-  const unitAmountCents = totalCentsForSelection(sl, tier, requestedLeads);
-  if (unitAmountCents < 50) {
-    res.status(400).json({
-      error: "below_minimum_charge",
-      message: "Order total is below the card minimum ($0.50). Increase the number of leads.",
-      minLeads: minLeadsForStripeForTier(sl, tier),
+  const pricing = resolveLeadPackCheckout(sl, tier, requestedLeads, promoCode);
+  if (!pricing.ok) {
+    res.status(pricing.status).json({
+      error: pricing.error,
+      message: pricing.message,
+      minLeads: pricing.minLeads,
     });
     return;
   }
+  const { totalCents: unitAmountCents, promoCode: activePromo } = pricing;
   const invSummary = getSummary();
   if (invSummary.total > 0 && invSummary.available < requestedLeads) {
     res.status(409).json({
@@ -1243,6 +1282,7 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
         requestedLeads: String(requestedLeads),
         campaignType: campaignType ?? "",
         agentRole: agentRole ?? "",
+        promoCode: activePromo || "",
       },
     },
     { idempotencyKey: `lead-${requestedLeads}-${serviceLine}-${leadTier}-${email}-${idem}`.slice(0, 90) }

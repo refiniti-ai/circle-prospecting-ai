@@ -4,10 +4,13 @@ import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { apiBase } from "../lib/apiBase";
+import { PromoCodeField } from "../components/PromoCodeField";
 import {
   LEAD_PRICE_MATRIX,
-  LEAD_SERVICE_LINES,
   LEAD_TIERS,
+  checkoutServiceLines,
+  defaultCheckoutServiceLine,
+  isServiceLineHiddenDuringBeta,
   formatMoneyUsd,
   pricePerLeadUsd,
   serviceLineLabel,
@@ -15,7 +18,7 @@ import {
   type LeadServiceLine,
   type LeadTierId,
 } from "../lib/leadPricing";
-import { notifyError } from "../lib/notify";
+import { notifyError, notifyWarning } from "../lib/notify";
 import "./pay-link.css";
 
 type FieldKey =
@@ -136,12 +139,22 @@ export function PayLinkPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ContactResp | null>(null);
 
-  const [serviceLine, setServiceLine] = useState<LeadServiceLine>("live_callers");
+  const [serviceLine, setServiceLine] = useState<LeadServiceLine>(() => defaultCheckoutServiceLine());
   const [radiusIndex, setRadiusIndex] = useState(0);
   const [requestedHomes, setRequestedHomes] = useState<number>(DEFAULT_HOMES_FALLBACK);
   const [manualTier, setManualTier] = useState<LeadTierId | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
   const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const visibleServiceLines = useMemo(() => checkoutServiceLines(), []);
+
+  useEffect(() => {
+    if (isServiceLineHiddenDuringBeta(serviceLine)) {
+      setServiceLine(defaultCheckoutServiceLine());
+    }
+  }, [serviceLine]);
 
   useEffect(() => {
     if (!contactId || !t) {
@@ -189,8 +202,15 @@ export function PayLinkPage() {
   const autoTier: LeadTierId = useMemo(() => tierFromLeadCount(safeHomes), [safeHomes]);
   const leadTier: LeadTierId = manualTier ?? autoTier;
 
-  const unitPrice = pricePerLeadUsd(serviceLine, leadTier);
+  const unitPrice = pricePerLeadUsd(serviceLine, leadTier, appliedPromoCode);
   const totalUsd = safeHomes * unitPrice;
+
+  const handlePromoApply = (code: string | null) => {
+    setAppliedPromoCode(code);
+    if (promoInput.trim() && !code) {
+      notifyWarning("Promo code not recognized.");
+    }
+  };
 
   const displayName = useMemo(() => {
     if (!data) return "";
@@ -246,6 +266,7 @@ export function PayLinkPage() {
           leadTier,
           homes: safeHomes,
           radiusLabel: selectedRadius?.label,
+          promoCode: appliedPromoCode ?? undefined,
         }),
       });
       const json = (await r.json()) as { ok?: boolean; url?: string; error?: string; message?: string };
@@ -427,7 +448,7 @@ export function PayLinkPage() {
                     </p>
                     <div className="buy-pricing-scroll">
                       <div className="buy-pricing-stack" role="group" aria-label="Plan packages by product">
-                        {LEAD_SERVICE_LINES.map((line) => {
+                        {visibleServiceLines.map((line) => {
                           const serviceSelected = serviceLine === line.id;
                           return (
                             <div
@@ -464,7 +485,9 @@ export function PayLinkPage() {
                                   {LEAD_TIERS.map((tier, idx) => {
                                     const planPick = serviceLine === line.id && leadTier === tier.id;
                                     const rowBg = idx % 2 === 1 ? "rgba(15,23,42,0.04)" : "#fff";
-                                    const price = LEAD_PRICE_MATRIX[line.id][idx];
+                                    const price = appliedPromoCode
+                                      ? pricePerLeadUsd(line.id, tier.id, appliedPromoCode)
+                                      : LEAD_PRICE_MATRIX[line.id][idx];
                                     return (
                                       <tr
                                         key={tier.id}
@@ -528,6 +551,15 @@ export function PayLinkPage() {
                       <strong>{formatMoneyUsd(totalUsd)}</strong>
                     </div>
                   </div>
+
+                  <PromoCodeField
+                    value={promoInput}
+                    onChange={setPromoInput}
+                    onApply={handlePromoApply}
+                    appliedCode={appliedPromoCode}
+                    disabled={busy}
+                    className="pay-promo"
+                  />
 
                   <button
                     type="button"

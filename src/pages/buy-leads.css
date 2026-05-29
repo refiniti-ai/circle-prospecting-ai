@@ -165,6 +165,22 @@
   word-break: break-word;
 }
 
+.buy-promo-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.buy-promo-row .premium-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.buy-promo-apply {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .buy-listing-agent span {
   overflow-wrap: anywhere;
   word-break: break-word;
