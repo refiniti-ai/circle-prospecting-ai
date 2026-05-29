@@ -3,7 +3,7 @@ import { LEAD_SERVICE_LINES, type LeadServiceLine } from "./leadPricing";
 /** Per-home rate when a valid beta promo code is applied (all products). */
 export const BETA_PROMO_PRICE_USD = 0.5;
 
-const BETA_HIDDEN_SERVICE_LINES: LeadServiceLine[] = ["ai_outreach", "hybrid"];
+const BETA_CHECKOUT_ONLY_SERVICE: LeadServiceLine = "live_callers";
 
 export function getBetaPromoCode(): string {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BETA_PROMO_CODE?.trim()) {
@@ -15,7 +15,7 @@ export function getBetaPromoCode(): string {
   return "BetaCPAI";
 }
 
-/** When true, AI Outreach and Hybrid are hidden and blocked at checkout. Set env to `false` to restore. */
+/** When true, checkout is Live Callers only (AI, Hybrid, Data hidden). Set env to `false` to restore all products. */
 export function isBetaHideAiHybrid(): boolean {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BETA_HIDE_AI_HYBRID === "false") {
     return false;
@@ -37,11 +37,14 @@ export function isValidBetaPromoCode(code: string | undefined | null): boolean {
 }
 
 export function isServiceLineHiddenDuringBeta(id: LeadServiceLine): boolean {
-  return isBetaHideAiHybrid() && BETA_HIDDEN_SERVICE_LINES.includes(id);
+  return isBetaHideAiHybrid() && id !== BETA_CHECKOUT_ONLY_SERVICE;
 }
 
 export function checkoutServiceLines() {
-  return LEAD_SERVICE_LINES.filter((line) => !isServiceLineHiddenDuringBeta(line.id));
+  if (isBetaHideAiHybrid()) {
+    return LEAD_SERVICE_LINES.filter((line) => line.id === BETA_CHECKOUT_ONLY_SERVICE);
+  }
+  return LEAD_SERVICE_LINES;
 }
 
 export function defaultCheckoutServiceLine(): LeadServiceLine {
@@ -51,7 +54,7 @@ export function defaultCheckoutServiceLine(): LeadServiceLine {
 
 export function assertCheckoutServiceLineAllowed(serviceLine: LeadServiceLine): string | null {
   if (isServiceLineHiddenDuringBeta(serviceLine)) {
-    return "AI Outreach and Hybrid are not available during beta. Choose Live Callers or Data Only.";
+    return "Only Live Callers is available during beta.";
   }
   return null;
 }

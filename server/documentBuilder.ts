@@ -14,6 +14,7 @@ import { canonicalCheckoutEmail } from "./checkoutIdentity.js";
 import { parseDocumentQuery, type ParsedDocumentFields } from "./customFieldMap.js";
 import { fetchOrderById, type ListingPayload, type RadiusId } from "./orderStore.js";
 import { orderNumberFromSessionId } from "./purchaseConfirmStore.js";
+import { productionSiteBase } from "../src/lib/siteUrl.js";
 
 export type DocumentLine = { label: string; value: string };
 
@@ -49,7 +50,7 @@ export type CampaignDocument = {
 };
 
 function publicSiteBase(): string {
-  return (process.env.APP_PUBLIC_URL || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+  return productionSiteBase();
 }
 
 function campaignLabel(t?: "just_listed" | "just_sold"): string {

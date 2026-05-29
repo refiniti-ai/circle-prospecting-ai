@@ -1,8 +1,7 @@
+import { isProductionSiteHost } from "./siteUrl";
+
 function isFirebaseHostingHost(hostname: string): boolean {
-  return (
-    hostname === "circle-prospecting-ai.web.app" ||
-    hostname === "circle-prospecting-ai.firebaseapp.com"
-  );
+  return isProductionSiteHost(hostname);
 }
 
 function isSafeProductionApiOverride(raw: string): boolean {

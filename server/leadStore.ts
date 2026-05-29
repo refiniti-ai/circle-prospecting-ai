@@ -68,6 +68,21 @@ export function getSummary() {
   return { total: inv.leads.length, available, sold, updatedAt: inv.lastUpdated };
 }
 
+/** Minimum homes treatable as in stock at checkout (campaign packs; override via LEAD_CHECKOUT_INVENTORY_MIN). */
+export function checkoutInventoryMin(): number {
+  const raw = process.env.LEAD_CHECKOUT_INVENTORY_MIN?.trim();
+  const n = raw ? Number.parseInt(raw, 10) : 8000;
+  return Number.isFinite(n) && n > 0 ? n : 8000;
+}
+
+/** Homes a buyer can purchase — real CSV count or floor, whichever is higher. */
+export function effectiveCheckoutAvailable(): number {
+  const s = getSummary();
+  const floor = checkoutInventoryMin();
+  if (s.total === 0) return floor;
+  return Math.max(s.available, floor);
+}
+
 export async function getLeadsForEmail(email: string): Promise<Lead[]> {
   const e = email.trim().toLowerCase();
   const fromFile = readInventory()

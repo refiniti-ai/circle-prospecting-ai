@@ -9,6 +9,7 @@ import { ListingCampaignForm } from "../components/ListingCampaignForm";
 import { BuyLeadsSearch, type BuyLeadsSearchResult } from "../components/BuyLeadsSearch";
 import { buildDraftListingFromForm } from "../lib/listingDraft";
 import { contactEmail } from "../lib/siteConfig";
+import { isProductionSiteHost } from "../lib/siteUrl";
 import { apiBase, isApiBaseConfigured } from "../lib/apiBase";
 import {
   fetchLeadCount,
@@ -104,8 +105,7 @@ function apiBaseLooksLikeLocalDev(): boolean {
 
 function isLiveFirebaseHost(): boolean {
   if (typeof window === "undefined") return false;
-  const h = window.location.hostname;
-  return h.endsWith(".web.app") || h.endsWith(".firebaseapp.com");
+  return isProductionSiteHost(window.location.hostname);
 }
 
 function checkoutFetchErrorMessage(err: unknown): string {
@@ -153,9 +153,6 @@ function formatHomeownersMatchedDisplay(count: number): string {
 
 const CITY_SEARCH_MIN = 2;
 const CITY_SEARCH_MAX = 80;
-
-/** Quick-pick homeowner counts — tier band and per-home rate derive from this number. */
-const HOME_COUNT_PRESETS = [100, 250, 500, 1000] as const;
 
 const BUY_NEXT_STEPS = [
   "We pull homeowner records",
@@ -1275,18 +1272,21 @@ export function BuyLeads() {
                   <p className="muted" style={{ margin: "0.25rem 0 0.45rem", fontSize: "0.86rem" }}>
                     How large a ring around your listing pin to include in this campaign.
                   </p>
-                  <div className="buy-radius-row">
+                  <div className="buy-radius-track" role="radiogroup" aria-label="Radius in miles">
                     {["0.25", "0.5", "1.0", "2.0", "3.0", "5.0"].map((r) => (
                       <button
                         key={r}
                         type="button"
-                        className={radius === r ? "btn btn-primary buy-radius-btn is-active" : "btn btn-ghost buy-radius-btn"}
+                        role="radio"
+                        aria-checked={radius === r}
+                        className={`buy-radius-chip${radius === r ? " is-active" : ""}`}
                         onClick={() => {
                           setRadius(r);
                           void refreshLeadCount({ quiet: true, radiusOverride: r });
                         }}
                       >
-                        {r}
+                        <span className="buy-radius-chip__val">{r}</span>
+                        <span className="buy-radius-chip__unit">mi</span>
                       </button>
                     ))}
                   </div>
@@ -1304,7 +1304,7 @@ export function BuyLeads() {
                     radius={mapPreviewRadius}
                     radiusMiles={mapPreviewRadiusMiles}
                     radiusLabel={`${mapPreviewRadiusLabel} radius`}
-                    height={290}
+                    height={340}
                   />
                 </div>
                 <p className="muted" style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
@@ -1354,8 +1354,7 @@ export function BuyLeads() {
                   </>
                 ) : (
                   <>
-                    First choose <strong>how many homeowners</strong> we reach. Your plan band and per-home rate update automatically. Then pick the{" "}
-                    <strong>plan and product</strong> in the rate tables (live, AI, hybrid, or data).
+                    First choose <strong>how many homeowners</strong> we reach. Your plan band and per-home rate update automatically. During beta, checkout is <strong>Live Callers</strong> only — pick your tier below.
                   </>
                 )}
               </p>
@@ -1396,37 +1395,8 @@ export function BuyLeads() {
                   </>
                 ) : (
                   <>
-                <div className="buy-pack-grid buy-home-presets" role="group" aria-label="Homeowner count presets">
-                  {HOME_COUNT_PRESETS.map((n) => {
-                    const active = requestedLeads === n;
-                    return (
-                      <button
-                        key={n}
-                        type="button"
-                        className={`buy-pack-card${active ? " is-active" : ""}`}
-                        aria-pressed={active}
-                        onClick={() => applyHomeCount(n)}
-                      >
-                        <span className="buy-pack-name">{n.toLocaleString()}</span>
-                        <span className="buy-pack-unit">homeowners</span>
-                      </button>
-                    );
-                  })}
-                  {estimatedAvailable > 0 ? (
-                    <button
-                      type="button"
-                      className={`buy-pack-card${requestedLeads === estimatedAvailable ? " is-active" : ""}`}
-                      aria-pressed={requestedLeads === estimatedAvailable}
-                      onClick={() => applyHomeCount(estimatedAvailable)}
-                    >
-                      <span className="buy-pack-name">Max</span>
-                      <span className="buy-pack-unit">{formatHomeownersMatchedDisplay(estimatedAvailable)} matched</span>
-                    </button>
-                  ) : null}
-                </div>
-
-                <label className="cp-form-grid buy-home-exact" style={{ maxWidth: 360, marginTop: "1rem" }}>
-                  <span className="muted-label">Exact count (updates plan automatically)</span>
+                <label className="cp-form-grid buy-home-exact" style={{ maxWidth: 360 }}>
+                  <span className="muted-label">Homes to call (updates plan automatically)</span>
                   <input
                     type="number"
                     className="premium-input"
@@ -1443,8 +1413,7 @@ export function BuyLeads() {
               <div className="buy-step2-block" style={{ marginTop: "1.35rem" }}>
                 <h3 className="buy-step2-subhead">2 · Choose your plan (4 packages)</h3>
                 <p className="muted" style={{ margin: "0 0 0.75rem", fontSize: "0.88rem", maxWidth: 720 }}>
-                  <strong>Dabble</strong>, <strong>Starter</strong>, <strong>Growth</strong>, and <strong>Scale</strong> — use the radio on a row
-                  (or click the row) to set plan band and product. Rates are per homeowner at checkout.
+                  <strong>Live Callers</strong> — <strong>Dabble</strong>, <strong>Starter</strong>, <strong>Growth</strong>, and <strong>Scale</strong> tiers. Rates are per homeowner at checkout.
                 </p>
                 <div className="buy-pricing-scroll">
                 <div className="buy-pricing-stack" role="group" aria-label="Plan packages by product">
@@ -1584,34 +1553,36 @@ export function BuyLeads() {
                 </div>
               </div>
               <div style={{ marginTop: "1rem", display: "grid", gap: "0.85rem" }}>
-                <label className="cp-form-grid" style={{ maxWidth: 440 }}>
-                  <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-                    Email (delivery + receipt)
-                    {listing ? " — pre-filled from listing agent" : ""}
-                  </span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    className="premium-input"
-                    placeholder="you@yourbrokerage.com"
-                  />
-                </label>
-                <label className="cp-form-grid" style={{ maxWidth: 440 }}>
-                  <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-                    Mobile phone
-                    {listing ? " — pre-filled from listing agent" : ""}
-                  </span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                    className="premium-input"
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </label>
+                <div className="buy-listing-form__grid buy-listing-form__grid--2 buy-checkout-contact">
+                  <label className="cp-form-grid">
+                    <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+                      Email (delivery + receipt)
+                      {listing ? " — pre-filled from listing agent" : ""}
+                    </span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      className="premium-input"
+                      placeholder="you@yourbrokerage.com"
+                    />
+                  </label>
+                  <label className="cp-form-grid">
+                    <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+                      Mobile phone
+                      {listing ? " — pre-filled from listing agent" : ""}
+                    </span>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      autoComplete="tel"
+                      className="premium-input"
+                      placeholder="+1 (555) 000-0000"
+                    />
+                  </label>
+                </div>
                 <PromoCodeField
                   value={promoInput}
                   onChange={setPromoInput}
@@ -1716,9 +1687,10 @@ export function BuyLeads() {
               .buy-wrap { max-width: 1180px; }
               .buy-grid {
                 display: grid;
-                grid-template-columns: 1.15fr 0.85fr;
+                grid-template-columns: 1.2fr 0.8fr;
                 gap: 1.25rem;
                 margin-top: 0.25rem;
+                align-items: start;
               }
               .buy-card {
                 border-radius: 18px;
@@ -1771,9 +1743,10 @@ export function BuyLeads() {
               }
               .buy-card--map {
                 background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+                align-self: start;
               }
               .buy-map-preview {
-                min-height: 290px;
+                min-height: 340px;
               }
               .buy-map-preview .gradient-border {
                 width: 100%;
@@ -1821,18 +1794,6 @@ export function BuyLeads() {
                 background: rgba(0,122,255,0.12); color: #005ecf;
               }
               .buy-step-t { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
-              .buy-radius-btn {
-                border-radius: 999px !important;
-                padding: 0.45rem 0.8rem !important;
-                font-size: 0.82rem !important;
-                font-weight: 700 !important;
-                min-width: 60px;
-              }
-              .buy-radius-btn.btn-primary:hover:not(:disabled) {
-                background: linear-gradient(90deg, var(--cp-blue-hover) 0%, var(--cp-lime-hover) 100%) !important;
-                color: #050c1a !important;
-                filter: none !important;
-              }
               .buy-pack-grid {
                 display: grid;
                 grid-template-columns: repeat(4,minmax(0,1fr));
@@ -2203,7 +2164,6 @@ export function BuyLeads() {
                 display: grid;
                 grid-template-columns: 1fr;
                 gap: 0.55rem;
-                max-width: 280px;
               }
               .buy-map-stats div {
                 border: 1px solid var(--border);

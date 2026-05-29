@@ -4,6 +4,7 @@ import axios from "axios";
 import Stripe from "stripe";
 import { z } from "zod";
 import { opsLog } from "./opsLog.js";
+import { productionSiteBase } from "../src/lib/siteUrl.js";
 
 /**
  * POST /api/generate-checkout
@@ -47,7 +48,7 @@ type GhlUpdateResult =
   | { mode: "error"; status?: number; message: string };
 
 function publicSiteBase(): string {
-  return (process.env.APP_PUBLIC_URL || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+  return productionSiteBase();
 }
 
 /**

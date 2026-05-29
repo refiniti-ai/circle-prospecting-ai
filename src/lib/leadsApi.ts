@@ -1,10 +1,10 @@
 import { apiBase } from "./apiBase";
+import { isProductionSiteHost } from "./siteUrl";
 import { type LeadServiceLine, type LeadTierId } from "./leadPricing";
 
 function isLiveFirebaseHost(): boolean {
   if (typeof window === "undefined") return false;
-  const h = window.location.hostname;
-  return h.endsWith(".web.app") || h.endsWith(".firebaseapp.com");
+  return isProductionSiteHost(window.location.hostname);
 }
 
 function assertJsonResponse(r: Response, context: string): void {

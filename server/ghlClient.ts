@@ -1,3 +1,5 @@
+import { productionSiteBase } from "../src/lib/siteUrl.js";
+
 export type GhlResult = {
   contactId?: string;
   opportunityId?: string;
@@ -42,7 +44,7 @@ export async function upsertGhlContactAndOpportunity(args: {
   }
 
   const auth = token ? { Authorization: `Bearer ${token}` } : undefined;
-  const siteBase = (process.env.APP_PUBLIC_URL || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+  const siteBase = productionSiteBase();
   const quoteUrl = `${siteBase}/quote?order=${encodeURIComponent(args.orderId)}&mls=${encodeURIComponent(args.mls)}&campaign=just_listed`;
   const buyLeadsUrl = `${siteBase}/buy-leads?mls=${encodeURIComponent(args.mls)}&order=${encodeURIComponent(args.orderId)}`;
 

@@ -17,8 +17,8 @@ Hosting does **not** rewrite `/api/**`. The production build must include your A
 
 3. On the API set at least:
 
-   - `APP_PUBLIC_URL=https://YOUR_PROJECT.web.app`
-   - `CORS_ORIGIN=https://YOUR_PROJECT.web.app`
+   - `APP_PUBLIC_URL=https://circleprospecting.ai`
+   - `CORS_ORIGIN=https://circleprospecting.ai,https://www.circleprospecting.ai`
    - Stripe and other secrets as in `.env.example`
 
 4. **Stripe webhook** (server-to-server) must hit the **API** URL, not Hosting:
@@ -49,17 +49,30 @@ Hosting does **not** rewrite `/api/**`. The production build must include your A
 2. `firebase.json` already rewrites `/api/**` → that service (keep this **before** the `**` SPA rule):
 
 3. Leave **`VITE_API_BASE_URL` empty** when building; the SPA calls relative `/api/*`.
-4. Stripe webhook can use the Hosting URL:
+4. Stripe webhook uses the public site URL:
 
-   - `https://YOUR_PROJECT.web.app/api/webhooks/stripe`
+   - `https://circleprospecting.ai/api/webhooks/stripe`
+
+## Custom domain (`circleprospecting.ai`)
+
+1. Firebase Console → **Hosting** → **Add custom domain** → enter `circleprospecting.ai` (and optionally `www.circleprospecting.ai`).
+2. At your DNS registrar, add the **A/TXT/CNAME** records Firebase shows. Wait for SSL (can take up to 24h).
+3. Set Cloud Run / API env (see below) before or right after DNS goes live:
+   - `APP_PUBLIC_URL=https://circleprospecting.ai`
+   - `CORS_ORIGIN=https://circleprospecting.ai,https://www.circleprospecting.ai,https://circle-prospecting-ai.web.app`
+4. Redeploy: `npm run deploy:production` (or hosting + API separately).
+5. Third-party updates once the domain resolves:
+   - **Stripe** → Webhooks → endpoint `https://circleprospecting.ai/api/webhooks/stripe`
+   - **Google Maps** → API key HTTP referrers: `https://circleprospecting.ai/*`, `https://www.circleprospecting.ai/*`
+   - **GHL** → regenerate pay links / workflows so URLs use `circleprospecting.ai`
 
 ## API runtime environment (Cloud Run or other)
 
 Set these on the API process:
 
 - `PORT=8080` (Cloud Run sets this automatically)
-- `APP_PUBLIC_URL=https://circle-prospecting-ai.web.app` (match your site)
-- `CORS_ORIGIN=https://circle-prospecting-ai.web.app`
+- `APP_PUBLIC_URL=https://circleprospecting.ai`
+- `CORS_ORIGIN=https://circleprospecting.ai,https://www.circleprospecting.ai,https://circle-prospecting-ai.web.app`
 - `STRIPE_SECRET_KEY=...`
 - `STRIPE_WEBHOOK_SECRET=...`
 - `ADMIN_USERNAME=...` / `ADMIN_PASSWORD=...` (admin UI login; JWT signed with `DASHBOARD_JWT_SECRET`)
@@ -86,7 +99,7 @@ See [Firebase Hosting + Cloud Run](https://firebase.google.com/docs/hosting/clou
 
 ## Smoke test
 
-1. Open `https://YOUR_PROJECT.web.app` — buy flow should reach checkout without network errors.
+1. Open `https://circleprospecting.ai` — buy flow should reach checkout without network errors.
 2. If using path A: `https://YOUR-API-ORIGIN/api/health`
-3. If using path B: `https://YOUR_PROJECT.web.app/api/health`
+3. If using path B (current setup): `https://circleprospecting.ai/api/health`
 4. Complete a test checkout; confirm webhook delivery in Stripe Dashboard.

@@ -66,17 +66,32 @@ export function ListingCampaignForm({ values, onChange, disabled, propertyOnly }
               />
             </label>
           </div>
-          <label className="cp-form-grid">
-            <span className="muted-label">Brokerage (optional)</span>
-            <input
-              type="text"
-              className="premium-input"
-              value={values.brokerage}
-              onChange={(e) => onChange("brokerage", e.target.value)}
-              disabled={disabled}
-              placeholder="EXP Realty LLC"
-            />
-          </label>
+          <div className="buy-listing-form__grid buy-listing-form__grid--2">
+            <label className="cp-form-grid">
+              <span className="muted-label">Brokerage (optional)</span>
+              <input
+                type="text"
+                className="premium-input"
+                value={values.brokerage}
+                onChange={(e) => onChange("brokerage", e.target.value)}
+                disabled={disabled}
+                placeholder="EXP Realty LLC"
+              />
+            </label>
+            <label className="cp-form-grid">
+              <span className="muted-label">Property address (street)</span>
+              <input
+                id="buy-listing-address"
+                type="text"
+                className="premium-input"
+                value={values.streetAddress}
+                onChange={(e) => onChange("streetAddress", e.target.value)}
+                disabled={disabled}
+                autoComplete="street-address"
+                placeholder="1775 Stable Trl"
+              />
+            </label>
+          </div>
         </>
       ) : (
         <label className="cp-form-grid">
@@ -91,19 +106,21 @@ export function ListingCampaignForm({ values, onChange, disabled, propertyOnly }
           />
         </label>
       )}
-      <label className="cp-form-grid">
-        <span className="muted-label">Property address (street)</span>
-        <input
-          id="buy-listing-address"
-          type="text"
-          className="premium-input"
-          value={values.streetAddress}
-          onChange={(e) => onChange("streetAddress", e.target.value)}
-          disabled={disabled}
-          autoComplete="street-address"
-          placeholder="1775 Stable Trl"
-        />
-      </label>
+      {propertyOnly ? (
+        <label className="cp-form-grid">
+          <span className="muted-label">Property address (street)</span>
+          <input
+            id="buy-listing-address"
+            type="text"
+            className="premium-input"
+            value={values.streetAddress}
+            onChange={(e) => onChange("streetAddress", e.target.value)}
+            disabled={disabled}
+            autoComplete="street-address"
+            placeholder="1775 Stable Trl"
+          />
+        </label>
+      ) : null}
       <div className="buy-listing-form__grid buy-listing-form__grid--3">
         <label className="cp-form-grid">
           <span className="muted-label">City</span>

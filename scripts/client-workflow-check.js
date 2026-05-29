@@ -4,6 +4,7 @@
  */
 import "dotenv/config";
 import { getFirestoreDb } from "../server/firebaseAdmin.js";
+import { productionSiteBase } from "../src/lib/siteUrl.js";
 const port = process.env.API_PORT || "8787";
 async function pingHealth() {
     try {
@@ -43,7 +44,7 @@ async function main() {
         if (h.err)
             console.log(`  (${h.err})`);
     }
-    const pubBase = (process.env.WORKFLOW_PUBLIC_BASE || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+    const pubBase = (process.env.WORKFLOW_PUBLIC_BASE || productionSiteBase()).replace(/\/$/, "");
     console.log("\n--- Production API (Hosting → Cloud Run) ---");
     console.log(`  Base: ${pubBase}`);
     try {

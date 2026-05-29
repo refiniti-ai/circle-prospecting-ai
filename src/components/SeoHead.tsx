@@ -1,5 +1,7 @@
 import { Helmet } from "react-helmet-async";
 
+import { PRODUCTION_SITE_ORIGIN } from "../lib/siteUrl";
+
 type Props = {
   title: string;
   description: string;
@@ -7,7 +9,7 @@ type Props = {
   noindex?: boolean;
 };
 
-const siteUrl = "https://circleprospecting.ai";
+const siteUrl = PRODUCTION_SITE_ORIGIN;
 
 export function SeoHead({ title, description, path = "/", noindex }: Props) {
   const url = `${siteUrl}${path === "/" ? "" : path}`;

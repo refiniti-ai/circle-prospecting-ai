@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { productionSiteBase } from "../src/lib/siteUrl.js";
 
 /** For /api/health — explains why mail is disabled when no transport is configured. */
 export function getMailTransportInfo(): {
@@ -318,8 +319,7 @@ function purchaseTypeLabel(checkoutType: string): string {
 }
 
 function publicSiteBase(): string {
-  const raw = process.env.APP_PUBLIC_URL?.trim() || "https://circle-prospecting-ai.web.app";
-  return raw.replace(/\/$/, "");
+  return productionSiteBase();
 }
 
 function supportMailto(): string {

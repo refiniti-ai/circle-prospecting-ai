@@ -14,6 +14,15 @@
   min-width: 0;
 }
 
+.buy-page .buy-grid {
+  align-items: start;
+}
+
+.buy-card--map {
+  position: sticky;
+  top: 1rem;
+}
+
 .buy-page .section-surface.buy-card {
   padding: clamp(1rem, 2.5vw, 1.75rem);
 }
@@ -138,16 +147,79 @@
   color: #b45309;
 }
 
-.buy-radius-row {
+.buy-radius-track {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.45rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding: 0.35rem;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.04) 0%, rgba(15, 23, 42, 0.07) 100%);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
-.buy-radius-btn {
-  flex: 1 1 calc(33.333% - 0.45rem);
-  min-width: 4.25rem;
+.buy-radius-track::-webkit-scrollbar {
+  display: none;
+}
+
+.buy-radius-chip {
+  flex: 1 1 0;
+  min-width: 3.35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  padding: 0.5rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text, #0f172a);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.buy-radius-chip__val {
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.buy-radius-chip__unit {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #64748b);
+  line-height: 1;
+}
+
+.buy-radius-chip:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 122, 255, 0.22);
+}
+
+.buy-radius-chip.is-active {
+  background: #fff;
+  border-color: rgba(0, 122, 255, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.buy-radius-chip.is-active .buy-radius-chip__val {
+  background: linear-gradient(90deg, #007aff 0%, #32d583 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.buy-radius-chip.is-active .buy-radius-chip__unit {
+  color: #007aff;
 }
 
 .buy-home-slider,
@@ -163,6 +235,10 @@
 .buy-tier-auto {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.buy-checkout-contact {
+  max-width: 100%;
 }
 
 .buy-promo-row {
@@ -198,6 +274,10 @@
 
   .buy-map-preview {
     min-height: 260px;
+  }
+
+  .buy-card--map {
+    position: static;
   }
 }
 
@@ -391,10 +471,6 @@
   .buy-opp-col-action::before {
     display: none;
   }
-
-  .buy-radius-btn {
-    flex: 1 1 calc(50% - 0.45rem);
-  }
 }
 
 @media (max-width: 400px) {
@@ -402,8 +478,13 @@
     grid-template-columns: 1fr;
   }
 
-  .buy-radius-btn {
-    flex: 1 1 100%;
+  .buy-radius-chip {
+    min-width: 2.85rem;
+    padding: 0.45rem 0.25rem;
+  }
+
+  .buy-radius-chip__val {
+    font-size: 0.84rem;
   }
 
   .buy-price-title-btn {

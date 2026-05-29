@@ -24,7 +24,7 @@ import {
   type LeadServiceLine,
   type LeadTierId,
 } from "../src/lib/leadPricing.ts";
-import { getSummary, upsertLeadsFromRows, getLeadsForEmail, estimateLeadCount } from "./leadStore.js";
+import { getSummary, upsertLeadsFromRows, getLeadsForEmail, estimateLeadCount, effectiveCheckoutAvailable } from "./leadStore.js";
 import { buildInvoiceDocument, buildQuoteDocument } from "./documentBuilder.js";
 import { signAdminToken, signDashboardToken, verifyAdminToken, verifyDashboardToken } from "./dashboardAuth.js";
 import {
@@ -62,6 +62,7 @@ import {
 } from "./ghlContactFetch.js";
 import { signPayLinkToken, verifyPayLinkToken } from "./payLinkToken.js";
 import { tierFromLeadCount } from "../src/lib/leadPricing.ts";
+import { productionSiteBase, PRODUCTION_SITE_ORIGIN } from "../src/lib/siteUrl.ts";
 import { processInboundNewListing } from "./newListingWorkflow.js";
 import {
   listLeadPackSessionIdsForEmail,
@@ -99,6 +100,12 @@ function buildAllowedOrigins(): string[] {
         const slug = host.slice(0, -".firebaseapp.com".length);
         const sibling = `https://${slug}.web.app`;
         if (!fromEnv.includes(sibling)) fromEnv.push(sibling);
+      } else if (host === "circleprospecting.ai") {
+        const www = "https://www.circleprospecting.ai";
+        if (!fromEnv.includes(www)) fromEnv.push(www);
+      } else if (host === "www.circleprospecting.ai") {
+        const root = "https://circleprospecting.ai";
+        if (!fromEnv.includes(root)) fromEnv.push(root);
       }
     } catch {
       /* ignore bad URL */
@@ -143,7 +150,10 @@ const checkoutLimit = rateLimit({ windowMs: 60_000, max: 15, standardHeaders: "d
 const webhookLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: "draft-7", legacyHeaders: false });
 
 function publicSiteBase() {
-  return (process.env.APP_PUBLIC_URL || "http://localhost:5173").replace(/\/$/, "");
+  const fromEnv = process.env.APP_PUBLIC_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  if (process.env.NODE_ENV === "production") return PRODUCTION_SITE_ORIGIN;
+  return "http://localhost:5173";
 }
 
 async function deliverPasswordResetEmail(
@@ -956,7 +966,7 @@ app.post("/api/generate-pay-link", checkoutLimit, async (req: Request, res: Resp
   }
   const { contactId } = parsed.data;
   const token = signPayLinkToken(contactId);
-  const base = (process.env.APP_PUBLIC_URL || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+  const base = productionSiteBase();
   const url = `${base}/pay/${encodeURIComponent(contactId)}?t=${token}`;
 
   const fieldKey = (process.env.GHL_PAY_LINK_FIELD_KEY?.trim() || "pay_link_url");
@@ -1112,7 +1122,7 @@ app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: 
   }
 
   const stripe = new Stripe(sk);
-  const base = (process.env.APP_PUBLIC_URL || "https://circle-prospecting-ai.web.app").replace(/\/$/, "");
+  const base = productionSiteBase();
   const tierMeta = tierRowMeta(leadTier as LeadTierId);
   const productTitle = `${serviceLineLabel(serviceLine as LeadServiceLine)} — ${homes.toLocaleString()} homeowners (${tierMeta.packageLabel})`;
   const idem = crypto.randomUUID().replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
@@ -1217,12 +1227,12 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
     return;
   }
   const { totalCents: unitAmountCents, promoCode: activePromo } = pricing;
-  const invSummary = getSummary();
-  if (invSummary.total > 0 && invSummary.available < requestedLeads) {
+  const checkoutAvailable = effectiveCheckoutAvailable();
+  if (requestedLeads > checkoutAvailable) {
     res.status(409).json({
       error: "insufficient_inventory",
-      message: `Only ${invSummary.available.toLocaleString()} lead(s) are available in inventory (you requested ${requestedLeads.toLocaleString()}). Upload more leads in Admin or choose a smaller pack.`,
-      available: invSummary.available,
+      message: `Only ${checkoutAvailable.toLocaleString()} lead(s) are available in inventory (you requested ${requestedLeads.toLocaleString()}). Upload more leads in Admin or choose a smaller pack.`,
+      available: checkoutAvailable,
       requested: requestedLeads,
     });
     return;

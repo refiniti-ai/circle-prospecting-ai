@@ -2,6 +2,7 @@ import { inboundNewListingSchema } from "./workflowTypes.js";
 import { upsertOrder, type ListingPayload } from "./orderStore.js";
 import { upsertGhlContactAndOpportunity } from "./ghlClient.js";
 import { buildMarketingEmail, sendMarketingEmail } from "./mailer.js";
+import { productionSiteBase } from "../src/lib/siteUrl.js";
 
 function parseCityStateZip(v: string | undefined, zip: string | undefined) {
   if (v && v.trim()) return v.trim();
@@ -55,7 +56,7 @@ export async function processInboundNewListing(raw: unknown) {
   };
 
   upsertOrder(listing);
-  const orderLink = `${(process.env.APP_PUBLIC_URL || "http://localhost:5173").replace(/\/$/, "")}/order/${listing.id}`;
+  const orderLink = `${productionSiteBase()}/order/${listing.id}`;
 
   const ghl = await upsertGhlContactAndOpportunity({
     orderId: listing.id,

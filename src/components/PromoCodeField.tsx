@@ -1,4 +1,4 @@
-import { getBetaPromoCode, isValidBetaPromoCode, normalizePromoCode } from "../lib/promoCodes";
+import { isValidBetaPromoCode, normalizePromoCode } from "../lib/promoCodes";
 
 type Props = {
   value: string;
@@ -41,7 +41,7 @@ export function PromoCodeField({ value, onChange, onApply, appliedCode, disabled
             }}
             disabled={disabled}
             autoComplete="off"
-            placeholder={getBetaPromoCode()}
+            placeholder="Enter your promo code"
             aria-describedby="buy-promo-hint"
           />
           <button type="button" className="btn btn-ghost buy-promo-apply" disabled={disabled} onClick={apply}>

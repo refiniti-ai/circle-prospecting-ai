@@ -443,8 +443,8 @@ export function PayLinkPage() {
                   <div className="pay-step-block">
                     <h3 className="buy-step2-subhead">2 · Choose your plan (4 packages)</h3>
                     <p className="muted pay-subhint">
-                      <strong>Dabble</strong>, <strong>Starter</strong>, <strong>Growth</strong>, and{" "}
-                      <strong>Scale</strong> — click a row to set plan band and service. Rates are per homeowner.
+                      <strong>Live Callers</strong> — <strong>Dabble</strong>, <strong>Starter</strong>, <strong>Growth</strong>, and{" "}
+                      <strong>Scale</strong>. Click a row to set your tier. Rates are per homeowner.
                     </p>
                     <div className="buy-pricing-scroll">
                       <div className="buy-pricing-stack" role="group" aria-label="Plan packages by product">

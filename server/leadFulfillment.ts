@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { canonicalCheckoutEmail } from "./checkoutIdentity.js";
-import { allocateLeads } from "./leadStore.js";
+import { allocateLeads, getSummary } from "./leadStore.js";
 import { opsLog } from "./opsLog.js";
 
 export function fulfillLeadPackFromSession(session: Stripe.Checkout.Session) {
@@ -9,6 +9,16 @@ export function fulfillLeadPackFromSession(session: Stripe.Checkout.Session) {
   const email = canonicalCheckoutEmail(session);
   if (!email || !packSize) {
     console.error("lead pack fulfillment: missing email or pack size", session.id);
+    return;
+  }
+  const { available } = getSummary();
+  if (packSize > available) {
+    opsLog("allocate_leads_skipped", {
+      sessionId: session.id,
+      packSize,
+      available,
+      reason: "campaign_fulfillment_operational",
+    });
     return;
   }
   const r = allocateLeads(email, packSize, session.id);
