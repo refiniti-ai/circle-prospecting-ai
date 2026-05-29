@@ -425,6 +425,7 @@ export function BuyLeads() {
     (data: ListingPayload, radiusId: RadiusId = "h1") => {
       const normalized = normalizeListingAgents(data);
       setListing(normalized);
+      setMapNotice(null);
       applyListingRadius(normalized, radiusId);
       setListingLoading(false);
     },
@@ -437,6 +438,9 @@ export function BuyLeads() {
         loadListingPayload(result.listing);
         return;
       }
+      setMapLat(result.geo.lat);
+      setMapLng(result.geo.lng);
+      setMapNotice(null);
       const draft = buildDraftListingFromForm(result.form, result.geo, campaignType);
       loadListingPayload(draft);
     },

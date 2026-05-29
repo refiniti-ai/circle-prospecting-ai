@@ -10,6 +10,7 @@ import {
 import type { ParsedPlaceAddress } from "../lib/placesAddress";
 import type { ListingFormValues, ListingPayload } from "../lib/listingData";
 import { buildDraftListingFromForm, ghlHitToListingForm, parseListingAddressLine } from "../lib/listingDraft";
+import { listingAddressGeocodeQuery } from "../lib/listingData";
 
 export type BuyLeadsSearchResult =
   | { kind: "listing"; listing: ListingPayload }
@@ -30,6 +31,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
   const [agentQuery, setAgentQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [agentHits, setAgentHits] = useState<GhlContactSearchHit[]>([]);
+  const [listingHits, setListingHits] = useState<GhlContactSearchHit[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   const reportError = useCallback(
@@ -51,6 +53,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
     setBusy(true);
     setStatus(null);
     setAgentHits([]);
+    setListingHits([]);
 
     try {
       if (mlsQ) {
@@ -60,6 +63,21 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
           onResult({ kind: "listing", listing });
           return;
         } catch {
+          try {
+            const hits = await searchGhlContacts(mlsQ);
+            const mlsNorm = mlsQ.toUpperCase();
+            const matched = hits.filter((h) => (h.mls || "").toUpperCase().includes(mlsNorm));
+            const toShow = matched.length > 0 ? matched : hits;
+            if (toShow.length > 0) {
+              setListingHits(toShow);
+              setStatus(
+                `${toShow.length} match${toShow.length === 1 ? "" : "es"} for MLS ${mlsQ} — select one below.`
+              );
+              return;
+            }
+          } catch {
+            /* fall through to address or error */
+          }
           if (!addrQ) {
             reportError(`No listing found for MLS ${mlsQ}. Try address search or enter details manually below.`);
             return;
@@ -126,7 +144,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
       const hits = await searchGhlContacts(q);
       setAgentHits(hits);
       if (!hits.length) setStatus("No contacts matched. Try a different name, email, or phone.");
-      else setStatus(`${hits.length} contact${hits.length === 1 ? "" : "s"} found in your CRM.`);
+      else setStatus(`${hits.length} contact${hits.length === 1 ? "" : "s"} found.`);
     } catch (e) {
       reportError(e instanceof Error ? e.message : "Agent search failed.");
     } finally {
@@ -134,21 +152,35 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
     }
   }, [agentQuery, reportError]);
 
-  const onPickAgent = useCallback(
-    async (hit: GhlContactSearchHit) => {
+  const applyGhlContact = useCallback(
+    async (hit: GhlContactSearchHit, source: "agent" | "listing") => {
       setBusy(true);
       setStatus(null);
+      setListingHits([]);
+      setAgentHits([]);
       try {
         const full = await fetchGhlContactPrefill(hit.id);
         const form = ghlHitToListingForm(full);
         if (full.mls) setMls(full.mls);
         if (full.listingAddress) setAddressLine(full.listingAddress);
-        const draft = buildDraftListingFromForm(form, {
-          lat: 28.08,
-          lng: -82.77,
-          county: "Pinellas",
-        });
-        setStatus(`Loaded ${full.name || "agent"} from CRM.`);
+
+        let geo = { lat: 28.0356, lng: -82.7743, county: "Pinellas" };
+        const geoQuery = listingAddressGeocodeQuery(form) || full.listingAddress?.trim() || "";
+        let mapNote: string | null = null;
+        if (geoQuery.length >= 8) {
+          try {
+            geo = await geocodeAddressLine(geoQuery);
+          } catch {
+            mapNote = "Contact loaded — refine the address if the map looks wrong.";
+          }
+        }
+
+        const draft = buildDraftListingFromForm(form, geo);
+        const label = full.name || "contact";
+        setStatus(
+          mapNote ||
+            `Loaded ${label}${source === "listing" && full.mls ? ` · MLS ${full.mls}` : ""}.`
+        );
         onResult({ kind: "listing", listing: draft });
       } catch (e) {
         reportError(e instanceof Error ? e.message : "Could not load contact.");
@@ -157,6 +189,20 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
       }
     },
     [onResult, reportError]
+  );
+
+  const onPickAgent = useCallback(
+    (hit: GhlContactSearchHit) => {
+      void applyGhlContact(hit, "agent");
+    },
+    [applyGhlContact]
+  );
+
+  const onPickListingHit = useCallback(
+    (hit: GhlContactSearchHit) => {
+      void applyGhlContact(hit, "listing");
+    },
+    [applyGhlContact]
   );
 
   return (
@@ -188,7 +234,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
           onClick={() => setTab("agent")}
           disabled={disabled || busy}
         >
-          By agent (CRM)
+          By agent
         </button>
       </div>
 
@@ -228,6 +274,25 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
           <p className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
             Type a street address for suggestions, or enter the full address in Step 1 below.
           </p>
+          {listingHits.length > 0 ? (
+            <ul className="buy-search-hits">
+              {listingHits.map((hit) => (
+                <li key={hit.id}>
+                  <button
+                    type="button"
+                    className="buy-search-hit"
+                    disabled={disabled || busy}
+                    onClick={() => onPickListingHit(hit)}
+                  >
+                    <strong>{hit.mls ? `MLS ${hit.mls}` : "Listing match"}</strong>
+                    <span>
+                      {[hit.name, hit.listingAddress, hit.email, hit.phone].filter(Boolean).join(" · ")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : (
         <div className="buy-search-panel">
@@ -247,7 +312,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
               />
             </label>
             <button type="button" className="btn btn-primary buy-search-btn" disabled={disabled || busy} onClick={() => void onAgentSearch()}>
-              Search CRM
+              Find agent
             </button>
           </div>
           {agentHits.length > 0 ? (

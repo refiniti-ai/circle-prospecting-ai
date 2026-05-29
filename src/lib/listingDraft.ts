@@ -6,10 +6,28 @@ import {
   type ListingPayload,
 } from "./listingData";
 
-/** Parse "123 Main St, Tampa, FL 33601" or "Dunn Ave, Jacksonville, FL" into form fields. */
+/** Parse "123 Main St, Tampa, FL 33601" or messy GHL lines into form fields. */
 export function parseListingAddressLine(line: string): Pick<ListingFormValues, "streetAddress" | "city" | "stateCode" | "zip"> {
   const raw = line.trim();
   if (!raw) return { streetAddress: "", city: "", stateCode: "", zip: "" };
+
+  const trailing = raw.match(/,\s*([^,]+?),\s*([A-Za-z]{2})\s+(\d{5})(?:-\d{4})?\s*$/);
+  if (trailing) {
+    const city = trailing[1].trim();
+    const stateCode = trailing[2].toUpperCase();
+    const zip = trailing[3];
+    let streetAddress = raw.slice(0, trailing.index).replace(/,\s*$/, "").trim();
+    const dupTail = new RegExp(
+      `,\\s*${city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*,\\s*${stateCode}\\s*,?\\s*${zip}.*$`,
+      "i"
+    );
+    streetAddress = streetAddress.replace(dupTail, "").trim();
+    if (!streetAddress && raw.includes(",")) {
+      streetAddress = raw.split(",")[0]?.trim() || raw;
+    }
+    return { streetAddress, city, stateCode, zip };
+  }
+
   const withZip = raw.match(/^(.+?),\s*([^,]+?),\s*([A-Za-z]{2})\s+(\d{5})(?:-\d{4})?$/);
   if (withZip) {
     return {
