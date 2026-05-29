@@ -52,10 +52,10 @@ export function PromoCodeField({ value, onChange, onApply, appliedCode, disabled
       <p id="buy-promo-hint" className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
         {appliedCode ? (
           <>
-            <strong>{appliedCode}</strong> applied — <strong>$0.50</strong> per home on all products.
+            <strong>{appliedCode}</strong> applied — <strong>$0.50</strong> per home.
           </>
         ) : (
-          <>Enter your beta invite code to unlock $0.50/home pricing.</>
+          <>Beta rate: <strong>$0.50</strong> per home on all plans.</>
         )}
       </p>
     </div>

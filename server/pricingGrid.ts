@@ -8,11 +8,11 @@ export type PlanId = "ai" | "live" | "pro";
 export type CampaignTier = { min: number; max: number; rates: Record<PlanId, number> };
 
 const DEFAULT_TIERS: CampaignTier[] = [
-  { min: 0, max: 250, rates: { ai: 0.25, live: 0.75, pro: 0.85 } },
-  { min: 251, max: 500, rates: { ai: 0.23, live: 0.7, pro: 0.8 } },
-  { min: 501, max: 1000, rates: { ai: 0.21, live: 0.65, pro: 0.75 } },
-  { min: 1001, max: 2500, rates: { ai: 0.19, live: 0.6, pro: 0.7 } },
-  { min: 2501, max: Number.POSITIVE_INFINITY, rates: { ai: 0.15, live: 0.5, pro: 0.6 } },
+  { min: 0, max: 250, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
+  { min: 251, max: 500, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
+  { min: 501, max: 1000, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
+  { min: 1001, max: 2500, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
+  { min: 2501, max: Number.POSITIVE_INFINITY, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
 ];
 
 let cached: { tiers: CampaignTier[]; source: "file" | "default"; path: string | null } | null = null;

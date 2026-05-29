@@ -44,12 +44,22 @@ export const LEAD_SERVICE_LINES: readonly {
   { id: "data_only", label: "Data Only", headerBg: "#d97e26", headerText: "#ffffff", rowAlt: "rgba(217, 126, 38, 0.12)" },
 ] as const;
 
+/** Beta launch flat rate per homeowner (all service lines and volume tiers). */
+export const FLAT_PER_HOME_USD = 0.5;
+
+const FLAT_TIER: readonly [number, number, number, number] = [
+  FLAT_PER_HOME_USD,
+  FLAT_PER_HOME_USD,
+  FLAT_PER_HOME_USD,
+  FLAT_PER_HOME_USD,
+];
+
 /** Tier index 0..3 = dabble..scale — per homeowner (USD) */
 export const LEAD_PRICE_MATRIX: Record<LeadServiceLine, readonly [number, number, number, number]> = {
-  ai_outreach: [0.25, 0.22, 0.21, 0.2],
-  live_callers: [0.75, 0.7, 0.66, 0.6],
-  hybrid: [0.8, 0.75, 0.7, 0.65],
-  data_only: [0.1, 0.09, 0.08, 0.07],
+  ai_outreach: FLAT_TIER,
+  live_callers: FLAT_TIER,
+  hybrid: FLAT_TIER,
+  data_only: FLAT_TIER,
 };
 
 const TIER_ORDER: LeadTierId[] = ["dabble", "starter", "growth", "scale"];
