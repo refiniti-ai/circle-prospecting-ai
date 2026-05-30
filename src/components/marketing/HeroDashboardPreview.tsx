@@ -130,7 +130,7 @@ export function HeroDashboardPreview() {
         <aside className="rz-hero-dash__nav" aria-hidden>
           <img
             className="rz-hero-dash__nav-logo"
-            src="/favicon.png"
+            src="/favicon.png?v=3"
             alt="Circle Prospecting AI"
             width={32}
             height={32}

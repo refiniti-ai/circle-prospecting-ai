@@ -61,19 +61,117 @@ export type ListingFormValues = {
   zip: string;
 };
 
-export function listingFormValuesFromPayload(l: ListingPayload): ListingFormValues {
-  const { city, stateCode, zip } = parseListingLocation(l);
+/** Parse "123 Main St, Tampa, FL 33601" or GHL lines like "…, City, FL, 33782" into form fields. */
+export function parseListingAddressLine(
+  line: string
+): Pick<ListingFormValues, "streetAddress" | "city" | "stateCode" | "zip"> {
+  const raw = line.trim();
+  if (!raw) return { streetAddress: "", city: "", stateCode: "", zip: "" };
+
+  const commaBeforeZip = raw.match(/,\s*([^,]+?),\s*([A-Za-z]{2})\s*,\s*(\d{5})(?:-\d{4})?\s*$/);
+  if (commaBeforeZip) {
+    return {
+      streetAddress: raw.slice(0, commaBeforeZip.index).replace(/,\s*$/, "").trim(),
+      city: commaBeforeZip[1].trim(),
+      stateCode: commaBeforeZip[2].toUpperCase(),
+      zip: commaBeforeZip[3],
+    };
+  }
+
+  const trailing = raw.match(/,\s*([^,]+?),\s*([A-Za-z]{2})\s+(\d{5})(?:-\d{4})?\s*$/);
+  if (trailing) {
+    const city = trailing[1].trim();
+    const stateCode = trailing[2].toUpperCase();
+    const zip = trailing[3];
+    let streetAddress = raw.slice(0, trailing.index).replace(/,\s*$/, "").trim();
+    const dupTail = new RegExp(
+      `,\\s*${city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*,\\s*${stateCode}\\s*,?\\s*${zip}.*$`,
+      "i"
+    );
+    streetAddress = streetAddress.replace(dupTail, "").trim();
+    if (!streetAddress && raw.includes(",")) {
+      streetAddress = raw.split(",")[0]?.trim() || raw;
+    }
+    return { streetAddress, city, stateCode, zip };
+  }
+
+  const withZip = raw.match(/^(.+?),\s*([^,]+?),\s*([A-Za-z]{2})\s+(\d{5})(?:-\d{4})?$/);
+  if (withZip) {
+    return {
+      streetAddress: withZip[1].trim(),
+      city: withZip[2].trim(),
+      stateCode: withZip[3].toUpperCase(),
+      zip: withZip[4],
+    };
+  }
+  const noZip = raw.match(/^(.+?),\s*([^,]+?),\s*([A-Za-z]{2})$/);
+  if (noZip) {
+    return {
+      streetAddress: noZip[1].trim(),
+      city: noZip[2].trim(),
+      stateCode: noZip[3].toUpperCase(),
+      zip: "",
+    };
+  }
+  return { streetAddress: raw, city: "", stateCode: "", zip: "" };
+}
+
+/** Merge parsed address parts with location fallbacks (avoids duplicating city/state in street). */
+export function normalizeListingFormValues(v: ListingFormValues): ListingFormValues {
+  const loc = parseListingAddressLine(v.streetAddress);
+  if (!loc.city && !loc.stateCode) return v;
   return {
+    ...v,
+    streetAddress: loc.streetAddress,
+    city: loc.city || v.city,
+    stateCode: loc.stateCode || v.stateCode,
+    zip: loc.zip || v.zip,
+  };
+}
+
+/** Single-line display for headers / search — never repeats city/state when already in street. */
+export function formatListingDisplayAddress(
+  v: Pick<ListingFormValues, "streetAddress" | "city" | "stateCode" | "zip">
+): string {
+  const norm = normalizeListingFormValues({
+    mls: "",
+    agentName: "",
+    email: "",
+    phone: "",
+    brokerage: "",
+    streetAddress: v.streetAddress,
+    city: v.city,
+    stateCode: v.stateCode,
+    zip: v.zip,
+  });
+  const street = norm.streetAddress.trim();
+  if (!street) return "";
+  const city = norm.city.trim();
+  const st = norm.stateCode.trim();
+  const zip = norm.zip.trim();
+  const tail = city && st && zip ? `${city}, ${st} ${zip}` : city && st ? `${city}, ${st}` : "";
+  if (!tail) return street;
+  const lower = street.toLowerCase();
+  if (lower.includes(tail.toLowerCase()) || (zip && lower.includes(zip) && city && lower.includes(city.toLowerCase()))) {
+    return street;
+  }
+  return `${street}, ${tail}`;
+}
+
+export function listingFormValuesFromPayload(l: ListingPayload): ListingFormValues {
+  const loc = parseListingLocation(l);
+  const fromAddr = parseListingAddressLine(l.address || "");
+  return normalizeListingFormValues({
     mls: l.mls,
     agentName: l.agentName,
     email: l.email,
     phone: l.phone,
     brokerage: l.brokerage,
-    streetAddress: l.address,
-    city,
-    stateCode,
-    zip: l.zip || zip,
-  };
+    streetAddress: fromAddr.streetAddress || l.address,
+    city: fromAddr.city || loc.city,
+    stateCode: fromAddr.stateCode || loc.stateCode,
+    zip: fromAddr.zip || loc.zip || l.zip,
+  });
 }
 
 export function applyListingFormValues(
@@ -81,17 +179,18 @@ export function applyListingFormValues(
   v: ListingFormValues,
   geo?: { lat?: number; lng?: number; county?: string }
 ): ListingPayload {
-  const cityStateZip = formatCityStateZip(v.city, v.stateCode, v.zip) || l.cityStateZip;
+  const norm = normalizeListingFormValues(v);
+  const cityStateZip = formatCityStateZip(norm.city, norm.stateCode, norm.zip) || l.cityStateZip;
   return {
     ...l,
-    mls: v.mls.trim() || l.mls,
-    agentName: v.agentName.trim() || l.agentName,
-    email: v.email.trim(),
-    phone: v.phone.trim(),
-    brokerage: v.brokerage.trim(),
-    address: v.streetAddress.trim() || l.address,
+    mls: norm.mls.trim() || l.mls,
+    agentName: norm.agentName.trim() || l.agentName,
+    email: norm.email.trim(),
+    phone: norm.phone.trim(),
+    brokerage: norm.brokerage.trim(),
+    address: norm.streetAddress.trim() || l.address,
     cityStateZip,
-    zip: v.zip.trim() || l.zip,
+    zip: norm.zip.trim() || l.zip,
     county: (geo?.county?.trim() || l.county).replace(/\s+County$/i, "") || l.county,
     lat: geo?.lat ?? l.lat,
     lng: geo?.lng ?? l.lng,

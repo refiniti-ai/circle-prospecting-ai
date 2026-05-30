@@ -13,6 +13,9 @@
     "build:next": "npm run build --prefix next-app",
     "deploy:firebase:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage",
     "deploy:gcloud": "gcloud run deploy circle-prospecting-ai-git --source . --region us-central1 --allow-unauthenticated --project circle-prospecting-ai --port 8080",
+    "build:favicon": "node scripts/build-favicon.mjs",
+    "build:preview-image": "node scripts/build-preview-image.mjs",
+    "facebook:scrape": "node scripts/facebook-scrape-urls.mjs",
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
     "deploy:production": "npm run build && firebase deploy --only hosting && npm run deploy:gcloud",
     "dev:vite": "vite",
@@ -58,6 +61,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "concurrently": "^9.0.1",
+    "sharp": "^0.33.5",
     "typescript": "~5.6.2",
     "vite": "^5.4.10"
   }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { bookCallUrl } from "../lib/siteConfig";
 import { BrandLogo } from "./BrandLogo";
 
 const navItems = [
@@ -53,14 +54,15 @@ export function SiteHeader() {
               </NavLink>
             </nav>
             <div className="header-actions">
-              <div className="rz-header-auth-links" aria-label="Account">
-                <Link to="/login" className="rz-header-auth-link" onClick={() => setOpen(false)}>
-                  Log in
-                </Link>
-              </div>
-              <Link to="/contact" className="btn btn-ghost rz-header-btn-demo" onClick={() => setOpen(false)}>
-                Get demo
-              </Link>
+              <a
+                href={bookCallUrl()}
+                className="btn btn-ghost rz-header-btn-demo"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+              >
+                Book call
+              </a>
               <Link to="/buy-leads" className="btn btn-primary rz-header-btn-primary" onClick={() => setOpen(false)}>
                 Start prospecting
                 <IconArrow />
@@ -89,14 +91,15 @@ export function SiteHeader() {
               <NavLink to="/buy-leads" end onClick={() => setOpen(false)} className={({ isActive }) => (isActive ? "nav-link-buy-active" : "nav-link-buy")}>
                 Start prospecting
               </NavLink>
-              <div className="rz-mobile-auth-row">
-                <Link to="/login" className="rz-mobile-auth-link" onClick={() => setOpen(false)}>
-                  Log in
-                </Link>
-              </div>
-              <Link to="/contact" className="btn btn-ghost rz-mobile-btn-full" onClick={() => setOpen(false)}>
-                Get demo
-              </Link>
+              <a
+                href={bookCallUrl()}
+                className="btn btn-ghost rz-mobile-btn-full"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+              >
+                Book call
+              </a>
               <Link to="/buy-leads" className="btn btn-primary rz-mobile-btn-full" onClick={() => setOpen(false)}>
                 Start prospecting <IconArrow />
               </Link>

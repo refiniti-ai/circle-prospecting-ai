@@ -4,15 +4,6 @@ import type { RadiusId } from "../lib/listingData";
 import { GOOGLE_MAPS_LIBRARIES, GOOGLE_MAPS_LOADER_ID, googleMapsApiKey } from "../lib/googleMapsConfig";
 import { getMapZoomForRadiusMeters, getRadiusMeters, osmBboxDeltaMiles, ringVisualPercentFromMiles } from "../lib/mapUtils";
 
-const darkStyles: { elementType?: string; featureType?: string; stylers: { color?: string; visibility?: string }[] }[] = [
-  { elementType: "geometry", stylers: [{ color: "#0c1220" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0c1220" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a9bb5" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a1628" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a2840" }] },
-  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-];
-
 const mapContainerStyle = { width: "100%", height: "100%" };
 
 type Props = {
@@ -114,7 +105,6 @@ function ListingMapLoaded(props: Props) {
         center={center}
         zoom={getMapZoomForRadiusMeters(meters)}
         options={{
-          styles: darkStyles,
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: true,

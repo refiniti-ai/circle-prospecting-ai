@@ -10,14 +10,36 @@ import {
 } from "../lib/buyLeadsSearchApi";
 import type { ParsedPlaceAddress } from "../lib/placesAddress";
 import type { ListingFormValues, ListingPayload } from "../lib/listingData";
-import { buildDraftListingFromForm, ghlHitToListingForm, parseListingAddressLine } from "../lib/listingDraft";
-import { listingAddressGeocodeQuery } from "../lib/listingData";
+import { buildDraftListingFromForm, ghlHitToListingForm } from "../lib/listingDraft";
+import { formatListingDisplayAddress, listingAddressGeocodeQuery, parseListingAddressLine } from "../lib/listingData";
 
 export type BuyLeadsSearchResult =
   | { kind: "listing"; listing: ListingPayload }
   | { kind: "address"; form: ListingFormValues; geo: { lat: number; lng: number; county: string } };
 
 type Tab = "listing" | "agent";
+
+function searchStatusClass(message: string): string {
+  const base = "buy-search-status";
+  const m = message.toLowerCase();
+  if (m.includes("refine the address") || m.includes("map looks wrong")) {
+    return `${base} buy-search-status--notice`;
+  }
+  if (
+    m.includes("no ") ||
+    m.includes("could not") ||
+    m.includes("failed") ||
+    m.includes("not found") ||
+    m.includes("enter an") ||
+    m.includes("enter at least")
+  ) {
+    return `${base} buy-search-status--warn`;
+  }
+  if (m.includes("loaded") || m.includes("found") || m.includes("updated") || m.includes("selected")) {
+    return `${base} buy-search-status--success`;
+  }
+  return base;
+}
 
 type Props = {
   disabled?: boolean;
@@ -53,7 +75,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
         const full = await fetchGhlContactPrefill(hit.id);
         const form = ghlHitToListingForm(full);
         if (full.mls) setMls(full.mls);
-        if (full.listingAddress) setAddressLine(full.listingAddress);
+        setAddressLine(formatListingDisplayAddress(form));
 
         let geo = { lat: 28.0356, lng: -82.7743, county: "Pinellas" };
         const geoQuery = listingAddressGeocodeQuery(form) || full.listingAddress?.trim() || "";
@@ -333,7 +355,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
       )}
 
       {status ? (
-        <p className={`buy-search-status${status.toLowerCase().includes("no ") ? " buy-search-status--warn" : ""}`} role="status">
+        <p className={searchStatusClass(status)} role="status">
           {status}
         </p>
       ) : null}

@@ -11,6 +11,7 @@ type Props = {
 
 const siteUrl = PRODUCTION_SITE_ORIGIN;
 
+/** Open Graph / link previews are defined only in index.html (static). */
 export function SeoHead({ title, description, path = "/", noindex }: Props) {
   const url = `${siteUrl}${path === "/" ? "" : path}`;
 
@@ -20,13 +21,6 @@ export function SeoHead({ title, description, path = "/", noindex }: Props) {
       <title>{title}</title>
       <meta name="description" content={description} />
       <link rel="canonical" href={url} />
-      <meta property="og:title" content={title} />
-      <meta property="og:description" content={description} />
-      <meta property="og:url" content={url} />
-      <meta property="og:type" content="website" />
-      <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={title} />
-      <meta name="twitter:description" content={description} />
       {noindex && <meta name="robots" content="noindex" />}
     </Helmet>
   );

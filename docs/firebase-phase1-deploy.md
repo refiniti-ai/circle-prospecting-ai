@@ -61,7 +61,8 @@ Hosting does **not** rewrite `/api/**`. The production build must include your A
    - `APP_PUBLIC_URL=https://circleprospecting.ai`
    - `CORS_ORIGIN=https://circleprospecting.ai,https://www.circleprospecting.ai,https://circle-prospecting-ai.web.app`
 4. Redeploy: `npm run deploy:production` (or hosting + API separately).
-5. Third-party updates once the domain resolves:
+5. **Default Firebase URLs** (`circle-prospecting-ai.web.app` / `.firebaseapp.com`) 301-redirect to `circleprospecting.ai` via `firebase.json` `hosting.redirects` (keeps one public domain).
+6. Third-party updates once the domain resolves:
    - **Stripe** → Webhooks → endpoint `https://circleprospecting.ai/api/webhooks/stripe`
    - **Google Maps** → API key HTTP referrers: `https://circleprospecting.ai/*`, `https://www.circleprospecting.ai/*`
    - **GHL** → regenerate pay links / workflows so URLs use `circleprospecting.ai`

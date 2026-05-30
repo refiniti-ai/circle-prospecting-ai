@@ -1,3 +1,9 @@
+export const DEFAULT_BOOK_CALL_URL = "https://cal.com/circleprospectingai-greg/15min";
+
+export function bookCallUrl(): string {
+  return import.meta.env.VITE_BOOK_CALL_URL?.trim() || DEFAULT_BOOK_CALL_URL;
+}
+
 export function contactEmail(): string {
   return import.meta.env.VITE_CONTACT_EMAIL || "hello@circleprospecting.ai";
 }

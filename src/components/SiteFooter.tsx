@@ -28,7 +28,6 @@ export function SiteFooter() {
               <p className="rz-footer-rez-col-title">Company</p>
               <nav className="rz-footer-rez-links" aria-label="Company links">
                 <Link to="/contact">Contact</Link>
-                <Link to="/login">Log in</Link>
                 <Link to="/dashboard">Client dashboard</Link>
                 <Link to="/coverage">Areas</Link>
               </nav>

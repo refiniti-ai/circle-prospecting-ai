@@ -7,7 +7,7 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import { useScrollReveal } from "../../hooks/useScrollReveal";
-import { contactEmail } from "../../lib/siteConfig";
+import { bookCallUrl } from "../../lib/siteConfig";
 import { ListingMap } from "../ListingMap";
 import { DummyListingMapPreview } from "./DummyListingMapPreview";
 import { SAMPLE_LISTING } from "../../lib/listingData";
@@ -65,58 +65,42 @@ function RzBrowserShell({ children, variant = "default" }: { children: ReactNode
   );
 }
 
-/** Homepage CTAs — campaign, pricing, demo. */
+/** Homepage CTAs — listing search + pricing (book call stays in header only). */
 export function RzPrimaryCtas({
   showPricingLink = true,
-  showDemoLink = true,
   compact = false,
   layout = "inline",
 }: {
   showPricingLink?: boolean;
-  showDemoLink?: boolean;
   compact?: boolean;
-  /** `mid-band` = stacked primary + paired secondary pills (homepage CTA card). */
+  /** `mid-band` = stacked primary + pricing link (homepage CTA card). */
   layout?: "inline" | "mid-band";
 }) {
   if (layout === "mid-band") {
     return (
       <div className="rz-mid-cta-actions">
         <Link to="/buy-leads" className="btn btn-primary rz-btn-cta-lg rz-mid-cta-primary">
-          Start prospecting your area
+          Search My Listing
           <span aria-hidden>→</span>
         </Link>
-        {(showPricingLink || showDemoLink) && (
-          <div className="rz-mid-cta-secondary">
-            {showDemoLink ? (
-              <Link to="/contact" className="btn btn-ghost rz-mid-cta-secondary-btn">
-                Get conversations in my market
-              </Link>
-            ) : null}
-            {showPricingLink ? (
-              <Link to="/campaign-pricing" className="btn btn-ghost rz-mid-cta-secondary-btn">
-                See packages &amp; pricing
-              </Link>
-            ) : null}
-          </div>
-        )}
+        {showPricingLink ? (
+          <Link to="/campaign-pricing" className="btn btn-ghost rz-mid-cta-secondary-btn rz-mid-cta-pricing-link">
+            See packages &amp; pricing
+          </Link>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className={`rz-cta-triple rz-cta-triple--minimal${compact ? " rz-cta-triple--compact" : ""}`}>
+    <div className={`rz-cta-stack${compact ? " rz-cta-stack--compact" : ""}`}>
       <Link to="/buy-leads" className="btn btn-primary rz-btn-cta-lg">
-        Start prospecting your area
+        Search My Listing
         <span aria-hidden>→</span>
       </Link>
       {showPricingLink ? (
-        <Link to="/campaign-pricing" className="btn btn-link-rz">
-          See packages &amp; per-home pricing
-        </Link>
-      ) : null}
-      {showDemoLink ? (
-        <Link to="/contact" className="btn btn-ghost rz-glass-btn">
-          Get conversations in my market
+        <Link to="/campaign-pricing" className="btn btn-link-rz rz-cta-stack-pricing">
+          See packages &amp; pricing
         </Link>
       ) : null}
     </div>
@@ -347,8 +331,7 @@ export function RzEditorialHero() {
           </h1>
           <p className="rz-hero-v2-sub">
             Circle Prospecting AI combines homeowner data, AI dialing, and live callers to contact your market on your
-            behalf — so you get real opportunities: conversations, appointments, and deals (not another “AI tool”
-            login).
+            behalf — so you get real opportunities: conversations, appointments, and deals.
           </p>
           <RzPrimaryCtas />
         </div>
@@ -462,14 +445,11 @@ export function RzLeadShowcase() {
       afterBullets={
         <>
           <Link to="/buy-leads" className="btn btn-primary rz-btn-soft">
-            Start prospecting your area
+            Search My Listing
             <span aria-hidden>→</span>
           </Link>
           <Link to="/campaign-pricing" className="btn btn-ghost rz-btn-soft">
             See packages &amp; pricing
-          </Link>
-          <Link to="/contact" className="btn btn-ghost rz-btn-soft">
-            Get conversations in my market
           </Link>
         </>
       }
@@ -1211,7 +1191,7 @@ export function ContentBookSection() {
       <div className="container section-surface">
         <div className="cp-book gradient-border">
           <p className="rz-kicker-sans" style={{ marginBottom: "0.65rem" }}>
-            Demo
+            Book a call
           </p>
           <h2 className="rz-section-title" style={{ marginTop: 0 }}>
             Walk through intake, copy, and GHL handoff
@@ -1219,8 +1199,8 @@ export function ContentBookSection() {
           <p className="muted rz-muted" style={{ maxWidth: 520, margin: "0.5rem auto 1.5rem", textAlign: "center" }}>
             Align voice, tiers, Stripe modes, and admin CSV cadence — test or prod, your call.
           </p>
-          <a className="btn btn-primary" href={`mailto:${contactEmail()}?subject=Circle%20Prospecting%20AI%20—%20Demo`}>
-            {contactEmail()}
+          <a className="btn btn-primary" href={bookCallUrl()} target="_blank" rel="noopener noreferrer">
+            Book a 15-min call
           </a>
         </div>
       </div>

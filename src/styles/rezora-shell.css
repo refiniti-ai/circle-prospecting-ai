@@ -2035,6 +2035,26 @@ img.rz-footer-rez-logo {
   margin-bottom: 0;
 }
 
+.rz-cta-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 1.85rem;
+}
+
+.rz-cta-stack--compact {
+  margin-bottom: 0;
+}
+
+.rz-cta-stack-pricing {
+  margin-left: 0.15rem;
+}
+
+.rz-mid-cta-pricing-link {
+  width: 100%;
+}
+
 .rz-btn-cta-lg {
   padding: 0.65rem 1.35rem !important;
   border-radius: 999px !important;
@@ -2145,8 +2165,17 @@ img.rz-footer-rez-logo {
   color: #64748b;
 }
 
-.rz-hero-banner .rz-cta-triple {
+.rz-hero-banner .rz-cta-triple,
+.rz-hero-banner .rz-cta-stack {
   margin-bottom: 0;
+}
+
+.rz-hero-banner .rz-cta-stack > .btn-primary {
+  padding: 0.9rem 2.1rem !important;
+  min-height: 56px;
+  font-size: 1.08rem !important;
+  font-weight: 700 !important;
+  box-shadow: 0 14px 36px rgba(0, 122, 255, 0.32);
 }
 
 .rz-hero-banner-ctas {

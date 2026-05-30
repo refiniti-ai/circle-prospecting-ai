@@ -41,7 +41,9 @@ import {
   emptyListingFormValues,
   getLocalDemoOrder,
   LISTING_RADIUS_ORDER,
+  formatListingDisplayAddress,
   listingAddressGeocodeQuery,
+  normalizeListingFormValues,
   listingFormValuesFromPayload,
   radiusMilesFromId,
   parseListingLocation,
@@ -329,7 +331,12 @@ export function BuyLeads() {
   }, []);
 
   const applyListingFromPayload = useCallback(
-    (l: ListingPayload, radiusId: RadiusId, orderRole?: ListingAgentRole) => {
+    (
+      l: ListingPayload,
+      radiusId: RadiusId,
+      orderRole?: ListingAgentRole,
+      opts?: { fromSearch?: boolean }
+    ) => {
       const normalized = syncAgentFormsFromListing(l);
       const ring = normalized.radii[radiusId];
       const count = Math.max(1, ring.count);
@@ -342,22 +349,26 @@ export function BuyLeads() {
       setMapLat(normalized.lat);
       setMapLng(normalized.lng);
       setListingForm(listingFormValuesFromPayload(normalized));
+      const fromSearch = opts?.fromSearch && !campaignFromUrl;
       if (listingHasDualAgents(normalized)) {
         const role =
           orderRole ??
           orderingAgentRole ??
           agentFromUrl ??
-          (campaignFromUrl === "just_sold" ? "seller" : "buyer");
+          (fromSearch || campaignFromUrl === "just_sold" ? "seller" : "buyer");
         const agent = role === "seller" ? getSellerAgent(normalized) : getBuyerAgent(normalized);
         setEmail(agent.email.trim());
         setPhone(agent.phone.trim());
-        setCampaignType(campaignFromUrl ?? campaignForAgentRole(role));
+        setCampaignType(
+          campaignFromUrl ?? (fromSearch ? "just_sold" : campaignForAgentRole(role))
+        );
         setOrderingAgentRole(role);
       } else {
         setEmail(normalized.email.trim());
         setPhone(normalized.phone.trim());
-        if (normalized.campaignType) setCampaignType(normalized.campaignType);
-        else if (campaignFromUrl) setCampaignType(campaignFromUrl);
+        if (campaignFromUrl) setCampaignType(campaignFromUrl);
+        else if (fromSearch) setCampaignType("just_sold");
+        else if (normalized.campaignType) setCampaignType(normalized.campaignType);
       }
       zipManualLockRef.current = true;
     },
@@ -367,16 +378,25 @@ export function BuyLeads() {
   const onListingFormChange = useCallback(<K extends keyof ListingFormValues>(field: K, value: ListingFormValues[K]) => {
     setListingForm((prev) => {
       const next = { ...prev, [field]: value };
-      setListing((l) => (l ? applyListingFormValues(l, next) : l));
+      const normalized =
+        field === "streetAddress" || field === "city" || field === "stateCode" || field === "zip"
+          ? normalizeListingFormValues(next)
+          : next;
+      setListing((l) => (l ? applyListingFormValues(l, normalized) : l));
       if (field === "email") setEmail(String(value).trim());
       if (field === "phone") setPhone(String(value).trim());
-      return next;
+      return normalized;
     });
   }, []);
 
   const applyListingRadius = useCallback(
-    (l: ListingPayload, radiusId: RadiusId, orderRole?: ListingAgentRole) => {
-      applyListingFromPayload(l, radiusId, orderRole);
+    (
+      l: ListingPayload,
+      radiusId: RadiusId,
+      orderRole?: ListingAgentRole,
+      opts?: { fromSearch?: boolean }
+    ) => {
+      applyListingFromPayload(l, radiusId, orderRole, opts);
     },
     [applyListingFromPayload]
   );
@@ -422,12 +442,17 @@ export function BuyLeads() {
   );
 
   const loadListingPayload = useCallback(
-    (data: ListingPayload, radiusId: RadiusId = "h1") => {
+    (data: ListingPayload, radiusId: RadiusId = "h1", opts?: { fromSearch?: boolean }) => {
       const normalized = normalizeListingAgents(data);
       setListing(normalized);
       setMapNotice(null);
-      applyListingRadius(normalized, radiusId);
+      applyListingRadius(normalized, radiusId, undefined, opts);
       setListingLoading(false);
+      if (opts?.fromSearch) {
+        requestAnimationFrame(() => {
+          document.getElementById("buy-listing-loaded")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
     },
     [applyListingRadius]
   );
@@ -435,16 +460,16 @@ export function BuyLeads() {
   const handleBuyLeadsSearch = useCallback(
     (result: BuyLeadsSearchResult) => {
       if (result.kind === "listing") {
-        loadListingPayload(result.listing);
+        loadListingPayload(result.listing, "h1", { fromSearch: true });
         return;
       }
       setMapLat(result.geo.lat);
       setMapLng(result.geo.lng);
       setMapNotice(null);
-      const draft = buildDraftListingFromForm(result.form, result.geo, campaignType);
-      loadListingPayload(draft);
+      const draft = buildDraftListingFromForm(result.form, result.geo, "just_sold");
+      loadListingPayload(draft, "h1", { fromSearch: true });
     },
-    [loadListingPayload, campaignType]
+    [loadListingPayload]
   );
 
   useEffect(() => {
@@ -922,18 +947,13 @@ export function BuyLeads() {
                   </p>
                 ) : null}
                 {listing ? (
-                  <div className="buy-listing-head" style={{ marginBottom: "1rem" }}>
+                  <div id="buy-listing-loaded" className="buy-listing-head" style={{ marginBottom: "1rem" }}>
                     <div className="buy-listing-head__ids">
                       <span className="buy-listing-mls">{listingForm.mls || listing.mls}</span>
                       <span className="buy-listing-sep" aria-hidden>
                         |
                       </span>
-                      <span className="buy-listing-addr">
-                        {listingForm.streetAddress || listing.address}
-                        {listingForm.city.trim() ? `, ${listingForm.city.trim()}` : ""}
-                        {listingForm.stateCode.trim() ? `, ${listingForm.stateCode.trim()}` : ""}
-                        {listingForm.zip.trim() ? ` ${listingForm.zip.trim()}` : ""}
-                      </span>
+                      <span className="buy-listing-addr">{formatListingDisplayAddress(listingForm)}</span>
                     </div>
                   </div>
                 ) : null}
@@ -1316,10 +1336,7 @@ export function BuyLeads() {
                   {listingForm.streetAddress.trim() || listing ? (
                     <>
                       {" "}
-                      · {listingForm.mls || listing?.mls || "—"} · {listingForm.streetAddress.trim()}
-                      {listingForm.city.trim() ? `, ${listingForm.city.trim()}` : ""}
-                      {listingForm.stateCode.trim() ? `, ${listingForm.stateCode.trim()}` : ""}
-                      {listingForm.zip.trim() ? ` ${listingForm.zip.trim()}` : ""}
+                      · {listingForm.mls || listing?.mls || "—"} · {formatListingDisplayAddress(listingForm)}
                       {selectedListingRing ? ` · ${selectedListingRing.label}` : ""} · {requestedLeads.toLocaleString()} homes
                     </>
                   ) : (
