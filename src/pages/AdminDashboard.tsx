@@ -7,12 +7,15 @@ import {
   adminCreateClientPasswordResetLink,
   adminSetPurchaseLeadWorkStatus,
   changeAdminPassword,
+  fetchAdminCheckoutFunnel,
   fetchAdminPurchases,
-  fetchAdminSummary,
-  uploadLeadsCsv,
+  type AdminCheckoutFunnelRow,
+  type AdminCheckoutFunnelSummary,
   type AdminPurchaseRow,
 } from "../lib/leadsApi";
 import { notifyError, notifySuccess, notifyWarning } from "../lib/notify";
+import { fetchAdminSearchCatches, type AdminSearchCatchRow } from "../lib/searchCatcherApi";
+import { AdminSearchCatcherPanel } from "../components/admin/AdminSearchCatcherPanel";
 
 const KEY = "cpai_admin_jwt";
 const LEGACY_KEY = "cpai_admin_key";
@@ -20,13 +23,15 @@ const LEGACY_KEY = "cpai_admin_key";
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "purchases", label: "Purchases" },
-  { id: "inventory", label: "Lead inventory" },
+  { id: "checkouts", label: "Checkouts" },
+  { id: "searches", label: "Searches" },
   { id: "account", label: "Account" },
 ] as const;
 
-const REMOVED_TAB_PARAMS = new Set(["clients", "tools"]);
+const REMOVED_TAB_PARAMS = new Set(["clients", "tools", "inventory"]);
 
 const PURCHASES_PAGE_SIZE = 10;
+const CHECKOUTS_PAGE_SIZE = 10;
 
 type TabId = (typeof TABS)[number]["id"];
 
@@ -39,6 +44,87 @@ function formatMoney(cents: number | null, currency: string | null) {
 function slugLabel(raw: string | null | undefined): string {
   if (!raw) return "—";
   return raw.replace(/_/g, " ");
+}
+
+function funnelStatusLabel(status: string): string {
+  if (status === "started") return "On Stripe";
+  if (status === "canceled") return "Canceled";
+  if (status === "expired") return "Expired";
+  return status;
+}
+
+function funnelTypeLabel(checkoutType: string): string {
+  if (checkoutType === "intro_campaign") return "$99 intro";
+  if (checkoutType === "lead_pack") return "Buy leads";
+  if (checkoutType === "ghl_pay_link") return "Pay link";
+  return slugLabel(checkoutType);
+}
+
+function downloadAdminCheckoutsCsv(rows: AdminCheckoutFunnelRow[], filename: string) {
+  const header = [
+    "startedAt",
+    "status",
+    "customerEmail",
+    "checkoutType",
+    "serviceLine",
+    "requestedLeads",
+    "mls",
+    "listingAddress",
+    "pagePath",
+    "amountCents",
+  ];
+  const lines = [
+    header.join(","),
+    ...rows.map((r) =>
+      [
+        r.startedAt,
+        funnelStatusLabel(r.status),
+        r.customerEmail ?? "",
+        funnelTypeLabel(r.checkoutType),
+        slugLabel(r.serviceLine),
+        r.requestedLeads ?? "",
+        r.mls ?? "",
+        r.listingAddress ?? "",
+        r.pagePath ?? "",
+        r.amountCents ?? "",
+      ]
+        .map((c) => csvEscape(String(c)))
+        .join(",")
+    ),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function AdminFunnelUnpaidRow({ row }: { row: AdminCheckoutFunnelRow }) {
+  return (
+    <li className="adm-funnel-stopped__item">
+      <span className="adm-funnel-stopped__status">{funnelStatusLabel(row.status)}</span>
+      <div className="adm-funnel-stopped__body">
+        <span>
+          {row.customerEmail || "No email"} · {funnelTypeLabel(row.checkoutType)} · {slugLabel(row.serviceLine)} ·{" "}
+          {row.requestedLeads?.toLocaleString() ?? "—"} homes
+        </span>
+        {row.listingAddress || row.mls ? (
+          <span className="adm-funnel-stopped__listing">
+            {row.listingAddress || `MLS ${row.mls}`}
+            {row.listingAddress && row.mls ? ` · MLS ${row.mls}` : ""}
+          </span>
+        ) : null}
+        {row.pagePath ? (
+          <a className="adm-funnel-stopped__link" href={row.pagePath} target="_blank" rel="noreferrer">
+            Open listing
+          </a>
+        ) : null}
+      </div>
+      <span className="adm-funnel-stopped__time">{new Date(row.startedAt).toLocaleString()}</span>
+    </li>
+  );
 }
 
 function csvEscape(cell: string): string {
@@ -56,9 +142,16 @@ function downloadAdminPurchasesCsv(rows: AdminPurchaseRow[], filename: string) {
     "customerEmail",
     "amountTotalCents",
     "currency",
+    "mls",
+    "listingAddress",
+    "agentName",
+    "brokerage",
+    "customerPhone",
     "leadServiceLine",
     "leadTier",
     "requestedLeads",
+    "campaignType",
+    "radiusLabel",
     "targetingSummary",
     "lineItems",
     "leadWorkStatus",
@@ -74,9 +167,16 @@ function downloadAdminPurchasesCsv(rows: AdminPurchaseRow[], filename: string) {
         p.customerEmail ?? "",
         p.amountTotalCents ?? "",
         p.currency ?? "",
+        p.mls ?? "",
+        p.listingAddress ?? "",
+        p.agentName ?? "",
+        p.brokerage ?? "",
+        p.customerPhone ?? "",
         p.leadServiceLine ?? "",
         p.leadTier ?? "",
         p.requestedLeads ?? "",
+        p.campaignType ?? "",
+        p.radiusLabel ?? "",
         p.targetingSummary ?? "",
         p.lineItems.join(" | "),
         p.leadWorkStatus === "completed" ? "completed" : p.leadWorkStatus === "pending" ? "pending" : "",
@@ -139,11 +239,27 @@ function AdminPurchaseCard({
       </div>
       <div className="adm-purchase-card__sub">
         <span className="adm-purchase-card__email">{p.customerEmail || "No email on file"}</span>
+        {p.customerPhone ? <span className="adm-purchase-card__phone">{p.customerPhone}</span> : null}
         <time className="adm-purchase-card__time" dateTime={p.notifiedAt}>
           {new Date(p.notifiedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
         </time>
       </div>
-      {p.checkoutType === "lead_pack" ? (
+      {p.mls || p.listingAddress || p.agentName ? (
+        <div className="adm-purchase-card__listing">
+          {p.mls ? (
+            <p className="adm-purchase-card__mls">
+              <span className="adm-chip__k">MLS</span> {p.mls}
+            </p>
+          ) : null}
+          {p.listingAddress ? <p className="adm-purchase-card__address">{p.listingAddress}</p> : null}
+          {p.agentName || p.brokerage ? (
+            <p className="adm-purchase-card__agent">
+              {[p.agentName, p.brokerage].filter(Boolean).join(" · ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {p.checkoutType === "lead_pack" || p.checkoutType === "ghl_pay_link" ? (
         <div className="adm-purchase-card__chips">
           <span className="adm-chip">
             <span className="adm-chip__k">Service</span> {slugLabel(p.leadServiceLine)}
@@ -154,6 +270,16 @@ function AdminPurchaseCard({
           <span className="adm-chip">
             <span className="adm-chip__k">Qty</span> {p.requestedLeads ?? "—"}
           </span>
+          {p.campaignType ? (
+            <span className="adm-chip">
+              <span className="adm-chip__k">Campaign</span> {slugLabel(p.campaignType)}
+            </span>
+          ) : null}
+          {p.radiusLabel ? (
+            <span className="adm-chip">
+              <span className="adm-chip__k">Radius</span> {p.radiusLabel}
+            </span>
+          ) : null}
           {p.targetingSummary ? (
             <span className="adm-chip adm-chip--wide">
               <span className="adm-chip__k">Area</span> {p.targetingSummary}
@@ -202,19 +328,14 @@ export function AdminDashboard() {
   const [authChecking, setAuthChecking] = useState(true);
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
-  const [summary, setSummary] = useState<{
-    total: number;
-    available: number;
-    sold: number;
-    updatedAt?: string;
-  } | null>(null);
   const [purchases, setPurchases] = useState<AdminPurchaseRow[] | null>(null);
-
-  const [file, setFile] = useState<File | null>(null);
-  const [uploadBusy, setUploadBusy] = useState(false);
+  const [searchCatches, setSearchCatches] = useState<AdminSearchCatchRow[] | null>(null);
+  const [checkoutFunnel, setCheckoutFunnel] = useState<AdminCheckoutFunnelSummary | null>(null);
 
   const [purchaseQuery, setPurchaseQuery] = useState("");
   const [purchaseListPage, setPurchaseListPage] = useState(1);
+  const [checkoutQuery, setCheckoutQuery] = useState("");
+  const [checkoutListPage, setCheckoutListPage] = useState(1);
   const [copiedSession, setCopiedSession] = useState<string | null>(null);
 
   const [resetLinkEmail, setResetLinkEmail] = useState("");
@@ -298,8 +419,7 @@ export function AdminDashboard() {
     setLeadWorkBusyId(sessionId);
     try {
       await adminSetPurchaseLeadWorkStatus(activeKey, sessionId, status);
-      const [s, p] = await Promise.all([fetchAdminSummary(activeKey), fetchAdminPurchases(activeKey)]);
-      setSummary(s.inventory);
+      const p = await fetchAdminPurchases(activeKey);
       setPurchases(p.purchases);
     } catch (e) {
       notifyWarning(e instanceof Error ? e.message : "Could not update fulfillment status.");
@@ -309,9 +429,14 @@ export function AdminDashboard() {
   }
 
   const loadDashboard = useCallback(async (key: string) => {
-    const [s, p] = await Promise.all([fetchAdminSummary(key), fetchAdminPurchases(key)]);
-    setSummary(s.inventory);
+    const [p, funnelRes, searchesRes] = await Promise.all([
+      fetchAdminPurchases(key),
+      fetchAdminCheckoutFunnel(key).catch(() => null),
+      fetchAdminSearchCatches(key).catch(() => null),
+    ]);
     setPurchases(p.purchases);
+    setCheckoutFunnel(funnelRes?.funnel ?? null);
+    setSearchCatches(searchesRes?.searches ?? []);
   }, []);
 
   useEffect(() => {
@@ -347,8 +472,8 @@ export function AdminDashboard() {
     sessionStorage.removeItem(LEGACY_KEY);
     setActiveKey(null);
     setAuthenticated(false);
-    setSummary(null);
     setPurchases(null);
+    setSearchCatches(null);
     navigate("/login?tab=admin", { replace: true });
   }
 
@@ -358,23 +483,6 @@ export function AdminDashboard() {
       await loadDashboard(activeKey);
     } catch {
       notifyWarning("Could not refresh data.");
-    }
-  }
-
-  async function onUpload() {
-    if (!file || !activeKey) {
-      notifyError("Choose a CSV file first.");
-      return;
-    }
-    setUploadBusy(true);
-    try {
-      const r = await uploadLeadsCsv(file, activeKey);
-      notifySuccess(`Imported ${r.rows} rows. Available: ${r.summary.available}, total: ${r.summary.total}.`);
-      setSummary(r.summary);
-    } catch (e) {
-      notifyError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploadBusy(false);
     }
   }
 
@@ -405,6 +513,10 @@ export function AdminDashboard() {
         p.orderNumber,
         p.sessionId,
         p.customerEmail,
+        p.mls,
+        p.listingAddress,
+        p.agentName,
+        p.brokerage,
         p.checkoutType,
         p.targetingSummary,
         ...p.lineItems,
@@ -420,6 +532,8 @@ export function AdminDashboard() {
     setPurchaseListPage(1);
   }, [purchaseQuery]);
 
+  const recentPurchases = useMemo(() => (purchases ?? []).slice(0, 6), [purchases]);
+
   const purchaseListTotalPages = Math.max(1, Math.ceil(filteredPurchases.length / PURCHASES_PAGE_SIZE));
 
   useEffect(() => {
@@ -433,6 +547,48 @@ export function AdminDashboard() {
 
   const purchaseRangeStart = filteredPurchases.length === 0 ? 0 : (purchaseListPage - 1) * PURCHASES_PAGE_SIZE + 1;
   const purchaseRangeEnd = Math.min(purchaseListPage * PURCHASES_PAGE_SIZE, filteredPurchases.length);
+
+  const unpaidCheckouts = checkoutFunnel?.unpaid ?? checkoutFunnel?.recentStopped ?? [];
+
+  const filteredCheckouts = useMemo(() => {
+    const q = checkoutQuery.trim().toLowerCase();
+    if (!q) return unpaidCheckouts;
+    return unpaidCheckouts.filter((r) =>
+      [
+        r.customerEmail,
+        r.status,
+        funnelStatusLabel(r.status),
+        r.checkoutType,
+        funnelTypeLabel(r.checkoutType),
+        r.serviceLine,
+        r.mls,
+        r.listingAddress,
+        r.pagePath,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [unpaidCheckouts, checkoutQuery]);
+
+  useEffect(() => {
+    setCheckoutListPage(1);
+  }, [checkoutQuery]);
+
+  const checkoutListTotalPages = Math.max(1, Math.ceil(filteredCheckouts.length / CHECKOUTS_PAGE_SIZE));
+
+  useEffect(() => {
+    setCheckoutListPage((p) => Math.min(p, checkoutListTotalPages));
+  }, [checkoutListTotalPages]);
+
+  const paginatedCheckouts = useMemo(() => {
+    const start = (checkoutListPage - 1) * CHECKOUTS_PAGE_SIZE;
+    return filteredCheckouts.slice(start, start + CHECKOUTS_PAGE_SIZE);
+  }, [filteredCheckouts, checkoutListPage]);
+
+  const checkoutRangeStart = filteredCheckouts.length === 0 ? 0 : (checkoutListPage - 1) * CHECKOUTS_PAGE_SIZE + 1;
+  const checkoutRangeEnd = Math.min(checkoutListPage * CHECKOUTS_PAGE_SIZE, filteredCheckouts.length);
 
   if (authChecking) {
     return (
@@ -453,7 +609,7 @@ export function AdminDashboard() {
 
   return (
     <>
-      <SeoHead title="Admin | Dashboard" description="Purchases and inventory" path="/admin" noindex />
+      <SeoHead title="Admin | Dashboard" description="Purchases and operations" path="/admin" noindex />
       <div className="app-shell rz-shell rz-app">
         <SiteHeader />
         <main id="main-content" tabIndex={-1} className="page-space page-space--tight rzInterior adm-dash-premium">
@@ -498,18 +654,6 @@ export function AdminDashboard() {
                   <section className="adm-overview" aria-label="Summary">
                     <div className="adm-overview__grid">
                       <div className="adm-stat-card">
-                        <span className="adm-stat-card__label">Available</span>
-                        <span className="adm-stat-card__value">{summary?.available ?? "—"}</span>
-                      </div>
-                      <div className="adm-stat-card">
-                        <span className="adm-stat-card__label">Total leads</span>
-                        <span className="adm-stat-card__value">{summary?.total ?? "—"}</span>
-                      </div>
-                      <div className="adm-stat-card">
-                        <span className="adm-stat-card__label">Sold</span>
-                        <span className="adm-stat-card__value">{summary?.sold ?? "—"}</span>
-                      </div>
-                      <div className="adm-stat-card">
                         <span className="adm-stat-card__label">Orders</span>
                         <span className="adm-stat-card__value">{purchases?.length ?? "—"}</span>
                       </div>
@@ -527,16 +671,80 @@ export function AdminDashboard() {
                         <span className="adm-stat-card__label">Campaigns</span>
                         <span className="adm-stat-card__value">{purchaseStats.campaigns}</span>
                       </div>
+                      <div className="adm-stat-card">
+                        <span className="adm-stat-card__label">Continued to Stripe</span>
+                        <span className="adm-stat-card__value">{checkoutFunnel?.continued ?? "—"}</span>
+                      </div>
+                      <div className="adm-stat-card">
+                        <span className="adm-stat-card__label">Checkout paid</span>
+                        <span className="adm-stat-card__value">{checkoutFunnel?.paid ?? "—"}</span>
+                      </div>
+                      <div className="adm-stat-card">
+                        <span className="adm-stat-card__label">Stopped / abandoned</span>
+                        <span className="adm-stat-card__value">{checkoutFunnel?.stopped ?? "—"}</span>
+                      </div>
+                      <div className="adm-stat-card">
+                        <span className="adm-stat-card__label">In progress (&lt;24h)</span>
+                        <span className="adm-stat-card__value">{checkoutFunnel?.inProgress ?? "—"}</span>
+                      </div>
+                      <div className="adm-stat-card">
+                        <span className="adm-stat-card__label">Checkout conversion</span>
+                        <span className="adm-stat-card__value">
+                          {checkoutFunnel ? `${checkoutFunnel.conversionRate}%` : "—"}
+                        </span>
+                      </div>
                     </div>
-                    {summary?.updatedAt ? (
-                      <p className="adm-overview__meta">Inventory snapshot · {new Date(summary.updatedAt).toLocaleString()}</p>
+                    {recentPurchases.length ? (
+                      <div className="adm-recent-purchases">
+                        <div className="adm-recent-purchases__head">
+                          <h2 className="adm-recent-purchases__title">Recent purchases</h2>
+                          <Link to="/admin?tab=purchases" className="adm-recent-purchases__link">
+                            View all
+                          </Link>
+                        </div>
+                        <ul className="adm-recent-purchases__list">
+                          {recentPurchases.map((p) => (
+                            <li key={p.sessionId} className="adm-recent-purchases__item">
+                              <div className="adm-recent-purchases__main">
+                                <strong>{p.mls ? `MLS ${p.mls}` : p.orderNumber}</strong>
+                                <span>{formatMoney(p.amountTotalCents, p.currency)}</span>
+                              </div>
+                              <div className="adm-recent-purchases__meta">
+                                <span>{p.listingAddress || p.targetingSummary || "—"}</span>
+                                <span>
+                                  {p.customerEmail || "No email"}
+                                  {p.requestedLeads ? ` · ${p.requestedLeads.toLocaleString()} homes` : ""}
+                                </span>
+                              </div>
+                              <time className="adm-recent-purchases__time" dateTime={p.notifiedAt}>
+                                {new Date(p.notifiedAt).toLocaleString()}
+                              </time>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {checkoutFunnel?.recentStopped?.length ? (
+                      <div className="adm-funnel-stopped">
+                        <div className="adm-recent-purchases__head">
+                          <h2 className="adm-funnel-stopped__title">Went to Stripe — not paid</h2>
+                          <Link to="/admin?tab=checkouts" className="adm-recent-purchases__link">
+                            View all
+                          </Link>
+                        </div>
+                        <ul className="adm-funnel-stopped__list">
+                          {checkoutFunnel.recentStopped.map((row) => (
+                            <AdminFunnelUnpaidRow key={row.sessionId} row={row} />
+                          ))}
+                        </ul>
+                      </div>
                     ) : null}
                     <div className="adm-overview__cta">
                       <Link to="/admin?tab=purchases" className="adm-cta-btn adm-cta-btn--solid">
                         Purchases
                       </Link>
-                      <Link to="/admin?tab=inventory" className="adm-cta-btn">
-                        Add leads
+                      <Link to="/admin?tab=checkouts" className="adm-cta-btn">
+                        Checkouts
                       </Link>
                       <Link to="/admin?tab=account" className="adm-cta-btn">
                         Account / password
@@ -634,6 +842,92 @@ export function AdminDashboard() {
                   </section>
                 )}
 
+                {tab === "checkouts" && (
+                  <section className="adm-purchases-section">
+                    {!unpaidCheckouts.length ? (
+                      <div className="adm-empty-state" role="status">
+                        <p className="adm-empty-state__title">No unpaid checkouts</p>
+                        <p className="adm-empty-state__text">People who click checkout and don’t finish will show here.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="adm-toolbar">
+                          <label className="adm-toolbar__search">
+                            <span className="adm-toolbar__label">Search</span>
+                            <input
+                              type="search"
+                              className="adm-toolbar__input"
+                              placeholder="Email, MLS, address, $99 intro…"
+                              value={checkoutQuery}
+                              onChange={(e) => setCheckoutQuery(e.target.value)}
+                              autoComplete="off"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="adm-toolbar__export"
+                            onClick={() =>
+                              downloadAdminCheckoutsCsv(
+                                filteredCheckouts,
+                                `admin-checkouts-${new Date().toISOString().slice(0, 10)}.csv`
+                              )
+                            }
+                          >
+                            Export CSV · {filteredCheckouts.length}
+                          </button>
+                        </div>
+                        {filteredCheckouts.length === 0 ? (
+                          <p className="muted adm-purchases-empty">No checkouts match your search.</p>
+                        ) : (
+                          <>
+                            <div className="adm-funnel-stopped adm-funnel-stopped--tab">
+                              <ul className="adm-funnel-stopped__list">
+                                {paginatedCheckouts.map((row) => (
+                                  <AdminFunnelUnpaidRow key={row.sessionId} row={row} />
+                                ))}
+                              </ul>
+                            </div>
+                            {filteredCheckouts.length > CHECKOUTS_PAGE_SIZE ? (
+                              <div className="adm-pagination">
+                                <span className="adm-pagination__meta">
+                                  Showing {checkoutRangeStart}–{checkoutRangeEnd} of {filteredCheckouts.length} · Page{" "}
+                                  {checkoutListPage} of {checkoutListTotalPages}
+                                </span>
+                                <div className="adm-pagination__btns">
+                                  <button
+                                    type="button"
+                                    className="adm-pagination__btn"
+                                    disabled={checkoutListPage <= 1}
+                                    onClick={() => setCheckoutListPage((n) => Math.max(1, n - 1))}
+                                  >
+                                    Previous
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="adm-pagination__btn"
+                                    disabled={checkoutListPage >= checkoutListTotalPages}
+                                    onClick={() => setCheckoutListPage((n) => Math.min(checkoutListTotalPages, n + 1))}
+                                  >
+                                    Next
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="adm-pagination__foot muted">
+                                {filteredCheckouts.length} checkout{filteredCheckouts.length === 1 ? "" : "s"}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </section>
+                )}
+
+                {tab === "searches" && (
+                  <AdminSearchCatcherPanel searches={searchCatches} />
+                )}
+
                 {tab === "purchases" && (
                   <section className="adm-purchases-section">
                     {!purchases?.length ? (
@@ -716,54 +1010,6 @@ export function AdminDashboard() {
                         )}
                       </>
                     )}
-                  </section>
-                )}
-
-                {tab === "inventory" && (
-                  <section className="adm-inventory" aria-label="Lead inventory">
-                    <div className="adm-inventory__head">
-                      <h2 className="adm-inventory__title">Lead inventory</h2>
-                      <p className="adm-inventory__sub">Upload listing rows as CSV. Required columns: address, city, state, zip.</p>
-                    </div>
-                    {summary ? (
-                      <div className="adm-inventory__stats" aria-label="Counts">
-                        <div className="adm-inventory__stat">
-                          <span className="adm-inventory__stat-val">{summary.available}</span>
-                          <span className="adm-inventory__stat-lbl">Available</span>
-                        </div>
-                        <div className="adm-inventory__stat">
-                          <span className="adm-inventory__stat-val">{summary.total}</span>
-                          <span className="adm-inventory__stat-lbl">Total</span>
-                        </div>
-                        <div className="adm-inventory__stat">
-                          <span className="adm-inventory__stat-val">{summary.sold}</span>
-                          <span className="adm-inventory__stat-lbl">Sold</span>
-                        </div>
-                      </div>
-                    ) : null}
-                    {summary && summary.total === 0 ? (
-                      <div className="adm-inventory__hint" role="note">
-                        Counts stay at zero until the first successful CSV import.
-                      </div>
-                    ) : null}
-                    <div className="adm-drop">
-                      <label className="adm-drop__label">CSV file</label>
-                      <input
-                        className="adm-drop__input"
-                        type="file"
-                        accept=".csv"
-                        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                      />
-                      {file ? <p className="adm-drop__file">{file.name}</p> : <p className="adm-drop__placeholder">No file selected</p>}
-                    </div>
-                    <div className="adm-inventory__actions">
-                      <button type="button" className="adm-cta-btn adm-cta-btn--solid" disabled={uploadBusy} onClick={() => void onUpload()}>
-                        {uploadBusy ? "Uploading…" : "Upload"}
-                      </button>
-                      <a className="adm-cta-btn" href="/csv/lead-template.csv" download>
-                        Download template
-                      </a>
-                    </div>
                   </section>
                 )}
               </>
@@ -910,6 +1156,149 @@ export function AdminDashboard() {
           font-size: 0.8125rem;
           color: #64748b;
         }
+        .adm-recent-purchases {
+          margin: 0 0 1rem;
+          padding: 1rem 1.1rem;
+          border-radius: 14px;
+          border: 1px solid rgba(15, 23, 42, 0.08);
+          background: rgba(255, 255, 255, 0.92);
+        }
+        .adm-recent-purchases__head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          margin-bottom: 0.65rem;
+        }
+        .adm-recent-purchases__title {
+          margin: 0;
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: #0f172a;
+        }
+        .adm-recent-purchases__link {
+          font-size: 0.82rem;
+          font-weight: 600;
+          color: #007aff;
+          text-decoration: none;
+        }
+        .adm-recent-purchases__list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: 0.65rem;
+        }
+        .adm-recent-purchases__item {
+          padding-bottom: 0.65rem;
+          border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+        }
+        .adm-recent-purchases__item:last-child {
+          padding-bottom: 0;
+          border-bottom: none;
+        }
+        .adm-recent-purchases__main,
+        .adm-recent-purchases__meta {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.75rem;
+          font-size: 0.82rem;
+          color: #334155;
+        }
+        .adm-recent-purchases__main {
+          font-size: 0.88rem;
+          margin-bottom: 0.2rem;
+        }
+        .adm-recent-purchases__meta span:last-child {
+          color: #64748b;
+          text-align: right;
+        }
+        .adm-recent-purchases__time {
+          display: block;
+          margin-top: 0.2rem;
+          font-size: 0.78rem;
+          color: #94a3b8;
+        }
+        .adm-purchase-card__listing {
+          margin: 0.35rem 0 0.5rem;
+        }
+        .adm-purchase-card__mls {
+          margin: 0 0 0.2rem;
+          font-size: 0.9rem;
+          font-weight: 700;
+          color: #0f172a;
+        }
+        .adm-purchase-card__address,
+        .adm-purchase-card__agent {
+          margin: 0.15rem 0 0;
+          font-size: 0.82rem;
+          color: #475569;
+          line-height: 1.4;
+        }
+        .adm-purchase-card__phone {
+          font-size: 0.82rem;
+          color: #64748b;
+        }
+        .adm-funnel-stopped {
+          margin: 0 0 1rem;
+          padding: 1rem 1.1rem;
+          border-radius: 14px;
+          border: 1px solid rgba(15, 23, 42, 0.08);
+          background: rgba(255, 255, 255, 0.92);
+        }
+        .adm-funnel-stopped--tab {
+          margin-top: 0;
+        }
+        .adm-funnel-stopped .adm-recent-purchases__head .adm-funnel-stopped__title {
+          margin: 0;
+        }
+        .adm-funnel-stopped__title {
+          margin: 0 0 0.65rem;
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: #0f172a;
+        }
+        .adm-funnel-stopped__list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: 0.45rem;
+        }
+        .adm-funnel-stopped__item {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 0.65rem;
+          align-items: start;
+          font-size: 0.82rem;
+          color: #334155;
+        }
+        .adm-funnel-stopped__body {
+          display: flex;
+          flex-direction: column;
+          gap: 0.15rem;
+          min-width: 0;
+        }
+        .adm-funnel-stopped__listing {
+          color: #0f172a;
+          font-weight: 600;
+        }
+        .adm-funnel-stopped__link {
+          color: #1d4ed8;
+          font-weight: 600;
+          width: fit-content;
+        }
+        .adm-funnel-stopped__status {
+          font-weight: 700;
+          text-transform: capitalize;
+          color: #b45309;
+        }
+        .adm-funnel-stopped__time {
+          color: #64748b;
+          white-space: nowrap;
+        }
         .adm-overview__cta {
           display: flex;
           flex-wrap: wrap;
@@ -974,104 +1363,6 @@ export function AdminDashboard() {
           max-width: 22rem;
           margin-left: auto;
           margin-right: auto;
-        }
-        .adm-inventory {
-          padding: 1.5rem 1.6rem;
-          border-radius: 20px;
-          border: 1px solid rgba(15, 23, 42, 0.07);
-          background: linear-gradient(165deg, #ffffff 0%, #fafbfc 100%);
-          box-shadow: 0 4px 28px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.85) inset;
-          display: flex;
-          flex-direction: column;
-          gap: 1.25rem;
-          max-width: 640px;
-        }
-        .adm-inventory__head {
-          padding-bottom: 0.25rem;
-          border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-        }
-        .adm-inventory__title {
-          margin: 0 0 0.35rem;
-          font-size: 1.15rem;
-          font-weight: 800;
-          letter-spacing: -0.02em;
-          color: #0f172a;
-        }
-        .adm-inventory__sub {
-          margin: 0;
-          font-size: 0.875rem;
-          line-height: 1.5;
-          color: #64748b;
-        }
-        .adm-inventory__stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 0.75rem;
-        }
-        .adm-inventory__stat {
-          text-align: center;
-          padding: 0.85rem 0.5rem;
-          border-radius: 14px;
-          background: rgba(0, 122, 255, 0.05);
-          border: 1px solid rgba(0, 122, 255, 0.1);
-        }
-        .adm-inventory__stat-val {
-          display: block;
-          font-size: 1.5rem;
-          font-weight: 800;
-          letter-spacing: -0.03em;
-          color: #0f172a;
-          line-height: 1.1;
-        }
-        .adm-inventory__stat-lbl {
-          font-size: 0.6875rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: #64748b;
-        }
-        .adm-inventory__hint {
-          margin: 0;
-          padding: 0.65rem 0.85rem;
-          border-radius: 12px;
-          font-size: 0.8125rem;
-          color: #475569;
-          background: rgba(15, 23, 42, 0.04);
-          border: 1px solid rgba(15, 23, 42, 0.06);
-        }
-        .adm-drop {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .adm-drop__label {
-          font-size: 0.6875rem;
-          font-weight: 700;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: #64748b;
-        }
-        .adm-drop__input {
-          font: inherit;
-          font-size: 0.875rem;
-          max-width: 100%;
-        }
-        .adm-drop__file {
-          margin: 0;
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: #0f172a;
-        }
-        .adm-drop__placeholder {
-          margin: 0;
-          font-size: 0.8125rem;
-          color: #94a3b8;
-        }
-        .adm-inventory__actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.65rem;
-          padding-top: 0.25rem;
         }
         .adm-support {
           margin-top: 1.75rem;
@@ -1284,6 +1575,12 @@ export function AdminDashboard() {
           align-items: flex-start;
           gap: 0.45rem;
         }
+        .adm-purchase-card__badges {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.35rem;
+        }
         .adm-purchase-card__badge {
           display: inline-block;
           padding: 0.2rem 0.55rem;
@@ -1307,6 +1604,11 @@ export function AdminDashboard() {
           background: rgba(100, 116, 139, 0.12);
           color: #334155;
           border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+        .adm-purchase-card__badge--source {
+          background: rgba(124, 58, 237, 0.1);
+          color: #5b21b6;
+          border: 1px solid rgba(124, 58, 237, 0.22);
         }
         .adm-purchase-card__order {
           margin: 0;

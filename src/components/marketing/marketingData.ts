@@ -352,29 +352,41 @@ export const TESTIMONIALS: { quote: string; name: string; role: string; accent?:
   },
 ];
 
-/** Print-style pricing poster — package row labels (aligned to tier index). */
-export const VOLUME_PACKAGE_LABELS: readonly string[] = [
-  "Pay as you go",
-  "Starter",
-  "Growth",
-  "Scale",
-  "Scale+",
-];
+/** @deprecated Use LEAD_TIERS.packageLabel from leadPricing.ts */
+export const VOLUME_PACKAGE_LABELS: readonly string[] = ["Dabble", "Starter", "Growth", "Scale"];
 
-/** Data / export lane — planning rates for the sales sheet (confirm before purchase). */
-export const POSTER_DATA_PER_HOME_FALLBACK: readonly number[] = [0.1, 0.1, 0.09, 0.08, 0.08];
+export const POSTER_SHEET_KICKER = "Agent sales product sheet";
+export const POSTER_SHEET_TAGLINE = "AI powered · Human connected · Results delivered";
+/** Print flyer header checklist (right column). */
+export const FLYER_SHEET_CHECKLIST = [
+  "More Conversations.",
+  "More Listings.",
+  "More Closings.",
+] as const;
+export const POSTER_SHEET_HEADLINE = "Local focus. Real results.";
+export const POSTER_SHEET_INTRO =
+  "We find and connect with homeowners in your target area who are most likely to sell—so you can win more listings.";
 
 export const POSTER_PILLARS: readonly { title: string; d: string; icon: "ai" | "live" | "leads" }[] = [
-  { title: "Live callers", d: "Real conversations that build trust", icon: "live" },
   { title: "AI powered", d: "Smart targeting & intent scoring", icon: "ai" },
-  { title: "Qualified opportunities", d: "Callbacks & appointments routed to you", icon: "leads" },
+  { title: "Live callers", d: "Real conversations that build trust", icon: "live" },
+  { title: "Qualified leads", d: "Motivated sellers delivered to you", icon: "leads" },
 ];
+
+/** Client flyer / campaign-pricing pillar artwork (public root). */
+export const FLYER_PILLAR_IMAGE: Record<(typeof POSTER_PILLARS)[number]["icon"], string> = {
+  ai: "/Ai-powered.webp",
+  live: "/Live-Callers.webp",
+  leads: "/Qualified-leads.webp",
+};
 
 /** Sales-sheet style band (matches print one-pager). */
 export const POSTER_SHEET_BENEFITS: readonly string[] = [
-  "More listing conversations from radius coverage",
-  "Stay top of mind around every new listing",
-  "A scalable system—not a one-off list purchase",
+  "More listings and buyer opportunities",
+  "Stay top of mind in your farm",
+  "High-quality, motivated seller leads",
+  "Save time and focus on what you do best",
+  "Scalable system that grows with you",
 ];
 
 export const POSTER_SHEET_QUOTE: { body: string; emphasis: string } = {
@@ -383,18 +395,76 @@ export const POSTER_SHEET_QUOTE: { body: string; emphasis: string } = {
 };
 
 export const POSTER_SHEET_PROMISE =
-  "Committed to agent growth: clear per-home pricing, accountable execution, and outreach that carries your brand.";
+  "We are committed to helping agents win more business with proven systems, reliable results, and exceptional support.";
 
 export const POSTER_TESTIMONIALS_HEADLINE = "What agents say";
 
 /** Illustrative homeowner counts for the radius strip (not a guarantee). Aligns with checkout rings. */
+export const POSTER_RADIUS_TITLE = "Activate the neighborhood around your listing";
+export const POSTER_RADIUS_LEAD = "Illustrative homeowner counts — your map sets the real ring at checkout.";
+
 export const POSTER_RADIUS_BANDS: readonly { id: string; label: string; homes: string }[] = [
-  { id: "subdivision", label: "Subdivision", homes: "128 homeowners" },
-  { id: "q1", label: "¼ mile", homes: "214 homeowners" },
-  { id: "h1", label: "½ mile", homes: "482 homeowners" },
-  { id: "m1", label: "1 mile", homes: "1,126 homeowners" },
-  { id: "zip", label: "Zip Code", homes: "2,845 homeowners" },
+  { id: "subdivision", label: "Subdivision", homes: "100–150 homeowners" },
+  { id: "q1", label: "¼ mile", homes: "150–300 homeowners" },
+  { id: "h1", label: "½ mile", homes: "400–600 homeowners" },
+  { id: "m1", label: "1 mile", homes: "800–1,200 homeowners" },
+  { id: "zip", label: "Zip code", homes: "7,500–12,000 homeowners" },
 ];
+
+/** Client PDF — neighborhood band row (uppercase labels, en-dash counts). */
+export const FLYER_RADIUS_BANDS: readonly { id: string; label: string; homes: string }[] = [
+  { id: "subdivision", label: "Subdivision", homes: "100 – 150 Homeowners" },
+  { id: "q1", label: "1/4 Mile", homes: "150 – 300 Homeowners" },
+  { id: "h1", label: "1/2 Mile", homes: "400 – 600 Homeowners" },
+  { id: "m1", label: "1 Mile", homes: "800 – 1,200 Homeowners" },
+  { id: "zip", label: "Zipcode", homes: "7,500 – 12,000 Homeowners" },
+];
+
+export const FLYER_RADIUS_BULLETS = [
+  "Target the right area.",
+  "Generate more leads.",
+  "Win more listings.",
+] as const;
+
+export const FLYER_TESTIMONIALS: readonly {
+  quote: string;
+  name: string;
+  role: string;
+  stars: number;
+}[] = [
+  {
+    quote:
+      "Automated outreach and geo-targeting have made our listings more visible than ever. Consistent, high-quality leads month after month.",
+    name: "Stephen Anderson",
+    role: "Team Leader · Keller Williams",
+    stars: 5,
+  },
+  {
+    quote:
+      "The AI Circle Prospecting system completely transformed how we generate leads. Every listing now reaches the right neighborhood automatically.",
+    name: "Jeff Borham",
+    role: "Team Leader · eXp Realty",
+    stars: 5,
+  },
+  {
+    quote:
+      "The automated campaigns save us so much time. Our listings now dominate local neighborhoods and the lead quality has never been better.",
+    name: "Ray Butterfield",
+    role: "Agent · LPT Realty",
+    stars: 5,
+  },
+];
+
+export const POSTER_FOOTER_CTA = "Ready to dominate your neighborhood?";
+export const POSTER_FOOTER_COPY = "Let's grow your business and fill your pipeline!";
+export const POSTER_FOOTER_TAGLINE = "Built for agents · Backed by technology · Powered by people";
+
+/** Agent sales sheet footer — three-line stack (flyer) */
+export const POSTER_FOOTER_TAGLINE_LINES = [
+  { text: "Built for Agents.", tone: "dark" },
+  { text: "Backed by Technology.", tone: "green" },
+  { text: "Powered by People.", tone: "blue" },
+] as const;
 
 export const LISTING_SALES_PROCESS_STEPS: readonly {
   n: string;
@@ -469,3 +539,113 @@ export const PROCESS_SUMMARY_POINTS: readonly { title: string; d: string }[] = [
 
 export const PROCESS_FOOTER_CHANNELS =
   "Live callers · AI outreach · Voicemail · Text follow-up · Lead routing";
+
+/** /how-it-works — six-step infographic (matches client sales sheet). */
+export const HOW_IT_WORKS_HERO = {
+  title: "How Circle Prospecting AI Works",
+  tagline: "We have the Data. The Dialer. And the Callers.",
+  lead: "We help agents turn every Just Listed and Just Sold property into new conversations and opportunities.",
+} as const;
+
+export const HOW_IT_WORKS_STEPS: readonly {
+  n: string;
+  title: string;
+  lead: string;
+  image: string;
+  bullets?: readonly string[];
+  rings?: readonly { label: string; hint: string }[];
+  channels?: readonly { label: string; hint: string }[];
+}[] = [
+  {
+    n: "1",
+    title: "Your Listing Goes Live",
+    image: "/marketing/how-it-works/step-1-listing-live.png",
+    lead: "As soon as your property hits the MLS, we identify the homeowners around your listing and begin building your prospecting campaign.",
+    bullets: [
+      "MLS listing detection",
+      "Agent information capture",
+      "Property information capture",
+      "Neighborhood opportunity mapping",
+    ],
+  },
+  {
+    n: "2",
+    title: "Choose Your Target Area",
+    image: "/marketing/how-it-works/step-2-target-area.png",
+    lead: "Select how aggressively you want to market around your listing.",
+    rings: [
+      { label: "Subdivision", hint: "Hyper-targeted" },
+      { label: "1/4 Mile", hint: "Immediate neighbors" },
+      { label: "1/2 Mile", hint: "Local market" },
+      { label: "1 Mile", hint: "Market domination" },
+      { label: "ZIP Code", hint: "Maximum exposure" },
+    ],
+  },
+  {
+    n: "3",
+    title: "We Build Your Audience",
+    image: "/marketing/how-it-works/step-3-audience.png",
+    lead: "We identify homeowners and enrich records with contact information.",
+    bullets: ["Property ownership data", "Phone numbers", "Mailing addresses", "Neighborhood mapping"],
+  },
+  {
+    n: "4",
+    title: "We Promote You",
+    image: "/marketing/how-it-works/step-4-promote.png",
+    lead: "Using multiple channels to reach homeowners and create awareness.",
+    channels: [
+      { label: "AI Outreach", hint: "AI calling and AI follow-up" },
+      { label: "Live Callers", hint: "Professional callers have real conversations" },
+      { label: "Ringless Voicemail", hint: "Listing promotion and neighborhood awareness" },
+      { label: "Text Messaging", hint: "Follow-up and engagement" },
+    ],
+  },
+  {
+    n: "5",
+    title: "Homeowners Respond",
+    image: "/marketing/how-it-works/step-5-respond.png",
+    lead: "Homeowners engage through the channel they prefer.",
+    bullets: [
+      "Ask questions",
+      "Request listing information",
+      "Discuss selling their home",
+      "Request appointments",
+    ],
+  },
+  {
+    n: "6",
+    title: "You Receive Opportunities",
+    image: "/marketing/how-it-works/step-6-opportunities.png",
+    lead: "We send conversations and opportunities directly back to you in real time.",
+    bullets: [
+      "Seller leads",
+      "Buyer leads",
+      "Listing appointments",
+      "Neighborhood exposure",
+      "Brand recognition",
+    ],
+  },
+];
+
+export const HOW_IT_WORKS_PROOF: readonly { num: string; label: string }[] = [
+  { num: "500,000+", label: "Homeowner Calls Made" },
+  { num: "1,500+", label: "Seller Leads Generated" },
+  { num: "300+", label: "Closed Transactions" },
+  { num: "$4M+", label: "Real Estate Commissions Generated" },
+];
+
+export const HOW_IT_WORKS_TRUST: readonly { title: string; detail: string }[] = [
+  { title: "100% Compliant", detail: "TCPA & DNC Compliant" },
+  { title: "Your Data is Secure", detail: "We never share your data" },
+  { title: "US-Based Callers", detail: "Professional & Trained" },
+  { title: "Fast Turnaround", detail: "Results in as little as 24 hours" },
+];
+
+/** Optional full-page reference asset (place file in public/). */
+export const HOW_IT_WORKS_FLOW_IMAGE = "/how-it-works-flow.png";
+
+/** Homepage hero — client checkout screenshot (TB8502524 example). */
+export const HOMEPAGE_CAMPAIGN_PREVIEW = "/marketing/homepage-campaign-checkout.webp";
+
+/** Example MLS used in marketing demos — matches hero screenshot. */
+export const DEMO_MLS_ID = "TB8502524";

@@ -15,6 +15,7 @@
     "deploy:gcloud": "gcloud run deploy circle-prospecting-ai-git --source . --region us-central1 --allow-unauthenticated --project circle-prospecting-ai --port 8080",
     "build:favicon": "node scripts/build-favicon.mjs",
     "build:preview-image": "node scripts/build-preview-image.mjs",
+    "build:property-no-photo": "node scripts/build-property-no-photo.mjs",
     "facebook:scrape": "node scripts/facebook-scrape-urls.mjs",
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
     "deploy:production": "npm run build && firebase deploy --only hosting && npm run deploy:gcloud",

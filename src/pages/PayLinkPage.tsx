@@ -4,6 +4,7 @@ import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { apiBase } from "../lib/apiBase";
+import { reportCheckoutCanceled } from "../lib/leadsApi";
 import { PromoCodeField } from "../components/PromoCodeField";
 import {
   LEAD_PRICE_MATRIX,
@@ -220,9 +221,13 @@ export function PayLinkPage() {
   }, [data]);
 
   useEffect(() => {
-    if (canceled) {
-      notifyError("Checkout canceled. Pick a plan and try again.", { id: "pay-canceled" });
+    if (!canceled) return;
+    const sessionId = sessionStorage.getItem("cpai_checkout_session");
+    if (sessionId) {
+      sessionStorage.removeItem("cpai_checkout_session");
+      void reportCheckoutCanceled(sessionId).catch(() => {});
     }
+    notifyError("Checkout canceled. Pick a plan and try again.", { id: "pay-canceled" });
   }, [canceled]);
 
   function applyRadius(i: number) {
@@ -269,11 +274,18 @@ export function PayLinkPage() {
           promoCode: appliedPromoCode ?? undefined,
         }),
       });
-      const json = (await r.json()) as { ok?: boolean; url?: string; error?: string; message?: string };
+      const json = (await r.json()) as {
+        ok?: boolean;
+        url?: string;
+        sessionId?: string;
+        error?: string;
+        message?: string;
+      };
       if (!r.ok || !json.url) {
         notifyError(json.message || json.error || "Could not start checkout.");
         return;
       }
+      if (json.sessionId) sessionStorage.setItem("cpai_checkout_session", json.sessionId);
       window.location.assign(json.url);
     } catch (e) {
       notifyError(e instanceof Error ? e.message : "Network error.");
@@ -447,7 +459,12 @@ export function PayLinkPage() {
                       <strong>Scale</strong>. Click a row to set your tier. Rates are per homeowner.
                     </p>
                     <div className="buy-pricing-scroll">
-                      <div className="buy-pricing-stack" role="group" aria-label="Plan packages by product">
+                      <div
+                        className="buy-pricing-stack"
+                        role="group"
+                        aria-label="Plan packages by product"
+                        style={{ "--buy-pricing-cols": visibleServiceLines.length } as React.CSSProperties}
+                      >
                         {visibleServiceLines.map((line) => {
                           const serviceSelected = serviceLine === line.id;
                           return (
@@ -456,6 +473,12 @@ export function PayLinkPage() {
                               className={`buy-pricing-block${serviceSelected ? " is-selected" : ""}`}
                             >
                               <table className="buy-price-table">
+                                <colgroup>
+                                  <col className="buy-price-col-select" />
+                                  <col className="buy-price-col-package" />
+                                  <col className="buy-price-col-homes" />
+                                  <col className="buy-price-col-rate" />
+                                </colgroup>
                                 <thead>
                                   <tr>
                                     <th
@@ -508,8 +531,8 @@ export function PayLinkPage() {
                                             onChange={() => pickServiceAndTier(line.id, tier.id)}
                                           />
                                         </td>
-                                        <td>{tier.packageLabel}</td>
-                                        <td>{tier.homesLabel}</td>
+                                        <td className="buy-price-col-package">{tier.packageLabel}</td>
+                                        <td className="buy-price-col-homes">{tier.homesLabel}</td>
                                         <td>{formatMoneyUsd(price)}</td>
                                       </tr>
                                     );

@@ -1,6 +1,71 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- FirstPromoter affiliate tracking (global — all routes load this head) -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.0/jquery.min.js"
+      integrity="sha256-1IKHGl6UjLSIT6CXLqmKgavKBXtr0/jJlaGMEkh+dhw="
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      (function (w) {
+        w.fpr =
+          w.fpr ||
+          function () {
+            w.fpr.q = w.fpr.q || [];
+            w.fpr.q[arguments[0] == "set" ? "unshift" : "push"](arguments);
+          };
+      })(window);
+      fpr("init", { cid: "wlcdjd9q" });
+      fpr("click");
+    </script>
+    <script src="https://cdn.firstpromoter.com/fpr.js" async></script>
+    <script>
+      function getFPTid() {
+        return window.FPROM && window.FPROM.data.tid;
+      }
+      function initializeFPRBuyLinks() {
+        var buyStripeLinks = document.querySelectorAll('a[href^="https://buy.stripe.com/"]');
+        buyStripeLinks.forEach(function (link) {
+          var oldBuyStripeUrl = link.getAttribute("href");
+          var tid = getFPTid();
+          if (!tid || !oldBuyStripeUrl) return;
+          var url = new URL(oldBuyStripeUrl);
+          url.searchParams.set("client_reference_id", tid);
+          link.setAttribute("href", url.toString());
+        });
+      }
+      window.scheduleFPRBuyLinks = function () {
+        setTimeout(initializeFPRBuyLinks, 1000);
+      };
+      var stateCheck = setInterval(function () {
+        if (document.readyState === "complete") {
+          clearInterval(stateCheck);
+          window.scheduleFPRBuyLinks();
+        }
+      }, 100);
+      window.addEventListener("load", window.scheduleFPRBuyLinks);
+      window.addEventListener("popstate", window.scheduleFPRBuyLinks);
+      var _pushState = history.pushState;
+      history.pushState = function () {
+        _pushState.apply(history, arguments);
+        window.scheduleFPRBuyLinks();
+      };
+    </script>
+    <!-- Google Tag Manager -->
+    <script>
+      (function (w, d, s, l, i) {
+        w[l] = w[l] || [];
+        w[l].push({ "gtm.start": new Date().getTime(), event: "gtm.js" });
+        var f = d.getElementsByTagName(s)[0],
+          j = d.createElement(s),
+          dl = l != "dataLayer" ? "&l=" + l : "";
+        j.async = true;
+        j.src = "https://www.googletagmanager.com/gtm.js?id=" + i + dl;
+        f.parentNode.insertBefore(j, f);
+      })(window, document, "script", "dataLayer", "GTM-57DWWNLS");
+    </script>
+    <!-- End Google Tag Manager -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Circle Prospecting AI - automated circle prospecting for modern real estate. Turn new listings into neighborhood campaigns in minutes." />
@@ -13,6 +78,7 @@
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://circleprospecting.ai/" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Circle Prospecting AI" />
@@ -23,7 +89,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap"
       rel="stylesheet"
     />
     <title>Circle Prospecting AI | Automated Prospecting for Modern Real Estate</title>
@@ -45,8 +111,49 @@
       gtag("js", new Date());
       gtag("config", "G-MRYYE3V2TQ");
     </script>
+    <!-- Meta Pixel Code -->
+    <script>
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = "2.0";
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      fbq("init", "1369877655256076");
+      fbq("track", "PageView");
+    </script>
+    <!-- End Meta Pixel Code -->
   </head>
   <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript
+      ><iframe
+        src="https://www.googletagmanager.com/ns.html?id=GTM-57DWWNLS"
+        height="0"
+        width="0"
+        style="display: none; visibility: hidden"
+      ></iframe
+    ></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    <!-- Meta Pixel noscript -->
+    <noscript
+      ><img
+        height="1"
+        width="1"
+        style="display: none"
+        src="https://www.facebook.com/tr?id=1369877655256076&ev=PageView&noscript=1"
+        alt=""
+    /></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -106,9 +106,11 @@ function ListingMapLoaded(props: Props) {
         zoom={getMapZoomForRadiusMeters(meters)}
         options={{
           streetViewControl: false,
-          mapTypeControl: false,
+          mapTypeControl: true,
+          mapTypeControlOptions: { mapTypeIds: ["roadmap", "satellite"] },
           fullscreenControl: true,
           zoomControl: true,
+          gestureHandling: "greedy",
         }}
       >
         <Marker position={center} title="Subject listing" />

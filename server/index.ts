@@ -46,12 +46,19 @@ import {
   buildPasswordResetEmailContent,
   getMailTransportInfo,
   sendTextEmail,
+  splitPersonName,
 } from "./mailer.js";
+import { resolveRealMls } from "../src/lib/listingDraft.js";
 import { opsLog } from "./opsLog.js";
 import { createPasswordResetToken, deletePasswordResetToken, takePasswordResetToken } from "./passwordResetStore.js";
 import { applyPaidCheckoutSessionSideEffects } from "./checkoutSessionSideEffects.js";
 import { createStripeWebhookHandler } from "./stripeWebhook.js";
 import { createGenerateCheckoutHandler } from "./generateCheckout.js";
+import { handleIntroCampaignCheckout, handleIntroEligibility } from "./introCampaignCheckout.js";
+import {
+  handleIntroListingSnapshotGet,
+  handleIntroListingSnapshotPut,
+} from "./introListingSnapshotApi.js";
 import {
   fetchGhlContact,
   fetchGhlContactPrefill,
@@ -61,7 +68,30 @@ import {
   asInt,
   PAY_LINK_FIELD_KEYS,
 } from "./ghlContactFetch.js";
+import { listContactOpportunitiesSummary } from "./ghlOpportunityFetch.js";
 import { signPayLinkToken, verifyPayLinkToken } from "./payLinkToken.js";
+import {
+  ghlContactMlsLinkBody,
+  refreshWelcomeLinksForContact,
+  repairMissingPayLinksForContact,
+  backfillOpportunityMlsFromPayLink,
+  resolveAgentRoleForPayLink,
+  resolveCampaignPathForPayLink,
+  resolveMlsForPayLink,
+  resolvePayLinkOpportunityId,
+  recoverPayLinkContactId,
+  writeGhlMlsCheckoutLink,
+} from "./ghlMlsLink.js";
+import { handlePayLinkGo } from "./payLinkTrack.js";
+import { geocodeUSAddressServer } from "./geocode.js";
+import { listRecentPayLinkClicks } from "./payLinkClickStore.js";
+import {
+  backfillCheckoutFunnelFromPurchase,
+  getCheckoutFunnelSummary,
+  listingFunnelPagePath,
+  markCheckoutCanceled,
+  recordCheckoutStarted,
+} from "./checkoutFunnelStore.js";
 import { tierFromLeadCount } from "../src/lib/leadPricing.ts";
 import { productionSiteBase, PRODUCTION_SITE_ORIGIN } from "../src/lib/siteUrl.ts";
 import { processInboundNewListing } from "./newListingWorkflow.js";
@@ -73,12 +103,36 @@ import {
   setPurchaseLeadWorkStatus,
 } from "./purchaseConfirmStore.js";
 import { getFirestoreDb } from "./firebaseAdmin.js";
+import {
+  classifySearchQuery,
+  listSearchCatches,
+  safeRecordSearchCatch,
+  searchCatchListingPath,
+  searchCatchPageFromRequest,
+  searchCatchPagePathFromRequest,
+  searchCatchSourceFromRequest,
+} from "./searchCatcherStore.js";
+import { safePushWebsiteSearchToGhl } from "./ghlSearchPipeline.js";
 
 /** Cloud Run sets PORT (usually 8080); local dev uses API_PORT or 8787. */
 const PORT = Number.parseInt(process.env.PORT || process.env.API_PORT || "8080", 10);
 
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
+
+function safeRecordCheckoutStarted(input: Parameters<typeof recordCheckoutStarted>[0]) {
+  try {
+    recordCheckoutStarted(input);
+  } catch (err) {
+    console.error("[checkoutFunnel] recordCheckoutStarted failed", err);
+  }
+}
+
+function searchCatchContext(req: Request, mls?: string | null) {
+  const page = searchCatchPageFromRequest(req);
+  const pagePath = searchCatchListingPath(page, searchCatchPagePathFromRequest(req), mls ?? null);
+  return { page, source: searchCatchSourceFromRequest(req), pagePath };
+}
 
 function buildAllowedOrigins(): string[] {
   const fromEnv = (process.env.CORS_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173")
@@ -141,13 +195,15 @@ app.use(
       }
       callback(null, false);
     },
+    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-CP-Traffic-Source", "X-CP-Page-Path"],
     maxAge: 600,
   })
 );
 
-const generalLimit = rateLimit({ windowMs: 60_000, max: 200, standardHeaders: "draft-7", legacyHeaders: false });
+const generalLimit = rateLimit({ windowMs: 60_000, max: 800, standardHeaders: "draft-7", legacyHeaders: false });
 const contactLimit = rateLimit({ windowMs: 60_000, max: 8, standardHeaders: "draft-7", legacyHeaders: false });
 const checkoutLimit = rateLimit({ windowMs: 60_000, max: 15, standardHeaders: "draft-7", legacyHeaders: false });
+const payLinkGoLimit = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: "draft-7", legacyHeaders: false });
 const webhookLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: "draft-7", legacyHeaders: false });
 
 function publicSiteBase() {
@@ -250,6 +306,81 @@ app.post("/api/auth/client-login", generalLimit, async (req: Request, res: Respo
   }
   const token = await signDashboardToken(email);
   res.json({ token, email });
+});
+
+async function payLinkGoHandler(req: Request, res: Response) {
+  const result = await handlePayLinkGo(req);
+  if ("error" in result) {
+    res.status(result.status).send("Invalid or missing link parameters.");
+    return;
+  }
+  res.redirect(302, result.redirectUrl);
+}
+
+/** Tracked pay-link redirect: logs click, then → /{buyer|seller}/mls/{MLS} (or /mls/{MLS}). */
+app.get("/go", payLinkGoLimit, payLinkGoHandler);
+app.get("/api/go", payLinkGoLimit, payLinkGoHandler);
+
+app.get("/api/geocode", generalLimit, async (req: Request, res: Response) => {
+  const address = String(req.query.address || "").trim();
+  const street = String(req.query.street || "").trim();
+  const city = String(req.query.city || "").trim();
+  const state = String(req.query.state || "").trim();
+  const zip = String(req.query.zip || "").trim();
+  const structured =
+    street.length > 0
+      ? { streetAddress: street, city, stateCode: state, zip, mls: "", agentName: "", email: "", phone: "", brokerage: "" }
+      : undefined;
+  if (address.length < 8 && !structured?.streetAddress) {
+    res.status(400).json({ error: "address_too_short", message: "Address is too short to geocode." });
+    return;
+  }
+  if (address.length > 320) {
+    res.status(400).json({ error: "address_too_long" });
+    return;
+  }
+  try {
+    const geo = await geocodeUSAddressServer(address, structured);
+    const addrQ = address || [street, city, state, zip].filter(Boolean).join(", ");
+    const mlsRaw = String(req.query.mls || "").trim();
+    const mls = /^DRAFT[-_]/i.test(mlsRaw) ? "" : mlsRaw;
+    /** Listing map pin — not a user address search. */
+    if (!mls) {
+      safeRecordSearchCatch({
+        kind: "address",
+        query: addrQ,
+        ...searchCatchContext(req, mls),
+        resultCount: geo ? 1 : 0,
+        matchedName: String(req.query.agent || "").trim() || null,
+        matchedEmail: String(req.query.email || "").trim() || null,
+        matchedPhone: String(req.query.phone || "").trim() || null,
+        matchedMls: null,
+      });
+    }
+    res.json(geo);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "geocode_failed";
+    if (msg === "geocode_not_found" || msg === "address_too_short") {
+      const addrQ = address || [street, city, state, zip].filter(Boolean).join(", ");
+      const mlsRaw = String(req.query.mls || "").trim();
+      const mls = /^DRAFT[-_]/i.test(mlsRaw) ? "" : mlsRaw;
+      if (!mls) {
+        safeRecordSearchCatch({
+          kind: "address",
+          query: addrQ,
+          ...searchCatchContext(req, mls),
+          resultCount: 0,
+          matchedName: String(req.query.agent || "").trim() || null,
+          matchedEmail: String(req.query.email || "").trim() || null,
+          matchedPhone: String(req.query.phone || "").trim() || null,
+          matchedMls: null,
+        });
+      }
+      res.status(404).json({ error: msg });
+      return;
+    }
+    res.status(502).json({ error: "geocode_failed", message: msg });
+  }
 });
 
 app.get("/api/health", generalLimit, (_req: Request, res: Response) => {
@@ -714,6 +845,10 @@ app.get("/api/admin/purchases", generalLimit, requireAdmin, async (_req: Request
   res.json({ purchases: await listPurchaseNotifications() });
 });
 
+app.get("/api/admin/search-logs", generalLimit, requireAdmin, async (_req: Request, res: Response) => {
+  res.json({ searches: await listSearchCatches() });
+});
+
 const leadWorkStatusBody = z.object({
   status: z.enum(["pending", "completed"]),
 });
@@ -779,6 +914,45 @@ app.post("/api/admin/client-password-reset-link", checkoutLimit, requireAdmin, a
 app.get("/api/admin/client-accounts", generalLimit, requireAdmin, async (_req: Request, res: Response) => {
   const emails = await listClientAccountEmails();
   res.json({ count: emails.length, emails });
+});
+
+app.get("/api/admin/pay-link-clicks", generalLimit, requireAdmin, async (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const clicks = await listRecentPayLinkClicks(limit);
+  res.json({ ok: true, count: clicks.length, clicks });
+});
+
+app.get("/api/admin/checkout-funnel", generalLimit, requireAdmin, async (_req: Request, res: Response) => {
+  const purchases = await listPurchaseNotifications();
+  for (const p of purchases) {
+    backfillCheckoutFunnelFromPurchase({
+      sessionId: p.sessionId,
+      checkoutType: p.checkoutType,
+      notifiedAt: p.notifiedAt,
+      customerEmail: p.customerEmail,
+      leadServiceLine: p.leadServiceLine,
+      leadTier: p.leadTier,
+      requestedLeads: p.requestedLeads,
+      amountCents: p.amountTotalCents,
+    });
+  }
+  const funnel = await getCheckoutFunnelSummary();
+  res.json({ ok: true, funnel });
+});
+
+const checkoutCanceledBody = z.object({
+  sessionId: z.string().trim().min(10).max(200),
+});
+
+/** Stripe cancel_url beacon — session id is unguessable; used for abandoned-cart metrics only. */
+app.post("/api/checkout/funnel/canceled", generalLimit, async (req: Request, res: Response) => {
+  const parsed = checkoutCanceledBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  markCheckoutCanceled(parsed.data.sessionId);
+  res.json({ ok: true });
 });
 
 app.get("/api/admin/system", generalLimit, requireAdmin, (_req: Request, res: Response) => {
@@ -871,8 +1045,8 @@ app.post("/api/admin/leads/csv", generalLimit, requireAdmin, upload.single("file
 });
 
 const leadCheckout = z.object({
-  serviceLine: z.enum(["ai_outreach", "live_callers", "hybrid", "data_only"]),
-  leadTier: z.enum(["dabble", "starter", "growth", "scale"]),
+  serviceLine: z.enum(["ai_outreach", "live_callers", "hybrid", "data_only", "mailers"]),
+  leadTier: z.enum(["dabble", "starter", "growth", "scale", "dominate"]),
   email: z.string().email(),
   /** Collected before checkout; must match when signing in after payment. */
   phone: z.string().min(10, "Enter a valid phone number"),
@@ -884,6 +1058,11 @@ const leadCheckout = z.object({
   campaignType: z.enum(["just_listed", "just_sold"]).optional(),
   agentRole: z.enum(["buyer", "seller"]).optional(),
   promoCode: z.string().trim().max(40).optional(),
+  mls: z.string().trim().max(40).optional(),
+  listingAddress: z.string().trim().max(200).optional(),
+  agentName: z.string().trim().max(120).optional(),
+  brokerage: z.string().trim().max(120).optional(),
+  radiusLabel: z.string().trim().max(80).optional(),
 });
 
 function resolveLeadPackCheckout(
@@ -925,31 +1104,10 @@ function resolveLeadPackCheckout(
 app.post("/api/generate-checkout", checkoutLimit, createGenerateCheckoutHandler());
 
 /**
- * Generate a signed /pay/:contactId URL and write it back to the GHL contact custom field
- * `pay_link_url` (override via GHL_PAY_LINK_FIELD_KEY). Call this from your GHL workflow
- * once when a contact is created. Body: { contactId }.
+ * Writes pay_link_url = direct checkout; final_link_url = tracked /go (client flip-flop).
+ * Clicks on /go log contact + redirect to /{buyer|seller}/mls/{MLS}.
+ * Body: { contactId, mls, agentRole?, opportunityId? } — links save on Opportunity when id is sent or found by contactId+mls.
  */
-const generatePayLinkBody = z.preprocess(
-  (raw) => {
-    if (typeof raw !== "object" || raw === null) return raw;
-    const o = raw as Record<string, unknown>;
-    const q = (req: unknown) => (typeof req === "string" ? req.trim() : req);
-    return {
-      contactId:
-        q(o.contactId) ||
-        q(o.contactid) ||
-        q(o.contact_id) ||
-        q(o.ContactId) ||
-        q(o.id) ||
-        q((o as { contact?: { id?: unknown } }).contact?.id) ||
-        "",
-    };
-  },
-  z.object({
-    contactId: z.string().trim().min(1).max(120),
-  })
-);
-
 app.post("/api/generate-pay-link", checkoutLimit, async (req: Request, res: Response) => {
   const requiredToken = process.env.GENERATE_CHECKOUT_TOKEN?.trim();
   if (requiredToken) {
@@ -960,26 +1118,346 @@ app.post("/api/generate-pay-link", checkoutLimit, async (req: Request, res: Resp
     }
   }
 
-  const parsed = generatePayLinkBody.safeParse(req.body);
+  const parsed = ghlContactMlsLinkBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
     return;
   }
-  const { contactId } = parsed.data;
-  const token = signPayLinkToken(contactId);
-  const base = productionSiteBase();
-  const url = `${base}/pay/${encodeURIComponent(contactId)}?t=${token}`;
 
-  const fieldKey = (process.env.GHL_PAY_LINK_FIELD_KEY?.trim() || "pay_link_url");
-  let ghl: { ok: boolean; status: number; message?: string } = { ok: false, status: 0, message: "ghl_not_configured" };
+  const { contactId: contactIdBody, opportunityId, mls: mlsBody, agentRole: agentRoleBody } = parsed.data;
+  const payLinkArgs = { contactId: contactIdBody, opportunityId, mlsFromBody: mlsBody, roleFromBody: agentRoleBody };
+
+  opsLog("pay_link_request", {
+    contactId: contactIdBody,
+    mlsBody: mlsBody ?? "",
+    opportunityIdBody: opportunityId ?? "",
+    agentRoleBody: agentRoleBody ?? "",
+  });
+
+  let mls: string;
   try {
-    ghl = await updateGhlContactFields(contactId, { [fieldKey]: url });
+    mls = await resolveMlsForPayLink(payLinkArgs);
   } catch (e) {
-    ghl = { ok: false, status: 0, message: e instanceof Error ? e.message : "ghl_update_failed" };
+    const msg = e instanceof Error ? e.message : "ghl_fetch_failed";
+    res.status(502).json({ error: "ghl_fetch_failed", message: msg });
+    return;
   }
 
-  opsLog("pay_link_generated", { contactId, ghlOk: ghl.ok, ghlStatus: ghl.status });
-  res.json({ ok: true, url, token, ghl });
+  opsLog("pay_link_mls_resolved", { contactId: contactIdBody, mls });
+
+  if (mls.length < 3) {
+    res.status(400).json({
+      error: "mls_required",
+      message: "Provide mls in the request body (e.g. {{inboundWebhookRequest.mls}}).",
+    });
+    return;
+  }
+
+  let contactId = contactIdBody;
+  let contactRecovered = false;
+  try {
+    const recovered = await recoverPayLinkContactId({
+      contactId: contactIdBody,
+      mls,
+      agentRole: (await resolveAgentRoleForPayLink({
+        contactId: contactIdBody,
+        opportunityId: opportunityId?.trim() || undefined,
+        roleFromBody: agentRoleBody,
+      })) ?? undefined,
+    });
+    contactId = recovered.contactId;
+    contactRecovered = recovered.recovered;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "contact_not_found";
+    res.status(404).json({ error: "contact_not_found", message: msg });
+    return;
+  }
+
+  const {
+    opportunityId: resolvedOpportunityId,
+    lookup: opportunityLookup,
+    lookupDebug: opportunityLookupDebug,
+    requestedOpportunityId,
+    opportunityCorrected,
+  } = await resolvePayLinkOpportunityId({ contactId, mls, opportunityId });
+
+  if (!resolvedOpportunityId) {
+    res.status(502).json({
+      ok: false,
+      error: "opportunity_not_found",
+      message:
+        "No matching opportunity for this MLS. Confirm Create Opportunity runs before Generate Pay Link and Allow Duplicate Opportunities is ON.",
+      contactId,
+      mls,
+      requestedOpportunityId: requestedOpportunityId ?? opportunityId ?? null,
+      opportunityLookup,
+      ...(opportunityLookupDebug ? { opportunityLookupDebug } : {}),
+    });
+    return;
+  }
+
+  let agentRole;
+  let campaignPath;
+  try {
+    agentRole = await resolveAgentRoleForPayLink({
+      contactId,
+      opportunityId: resolvedOpportunityId ?? undefined,
+      roleFromBody: agentRoleBody,
+    });
+    campaignPath = await resolveCampaignPathForPayLink({
+      contactId,
+      opportunityId: resolvedOpportunityId ?? undefined,
+      roleFromBody: agentRoleBody,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "ghl_fetch_failed";
+    res.status(502).json({ error: "ghl_fetch_failed", message: msg });
+    return;
+  }
+
+  const payField = process.env.GHL_PAY_LINK_FIELD_KEY?.trim() || "pay_link_url";
+
+  const { url, trackedUrl, checkoutUrl, trackedFieldKeys, destinationFieldKeys, writeTarget, ghl, contactMirror } =
+    await writeGhlMlsCheckoutLink({
+      contactId,
+      opportunityId: resolvedOpportunityId ?? undefined,
+      mls,
+      agentRole,
+      campaignPath,
+      fieldKeys: [payField],
+    });
+
+  const opportunityMlsBackfill = await backfillOpportunityMlsFromPayLink({
+    opportunityId: resolvedOpportunityId,
+    mls,
+    lookupReason: opportunityLookupDebug?.reason ?? opportunityLookup,
+  });
+
+  opsLog("pay_link_generated", {
+    contactId,
+    contactRecovered,
+    opportunityId: resolvedOpportunityId ?? "",
+    requestedOpportunityId: requestedOpportunityId ?? "",
+    opportunityCorrected: opportunityCorrected ?? false,
+    opportunityLookup,
+    writeTarget,
+    mls,
+    agentRole: agentRole ?? "",
+    format: agentRole ? "agent_mls" : "mls",
+    ghlOk: ghl.ok,
+    contactMirrorOk: contactMirror?.ok,
+  });
+
+  const payload = {
+    ok: ghl.ok,
+    url,
+    trackedUrl,
+    checkoutUrl,
+    payLinkUrl: checkoutUrl,
+    destinationUrl: checkoutUrl,
+    trackedFieldKeys,
+    destinationFieldKeys,
+    mls,
+    agentRole: agentRole ?? null,
+    contactId,
+    contactRecovered,
+    opportunityId: resolvedOpportunityId,
+    requestedOpportunityId: requestedOpportunityId ?? null,
+    opportunityCorrected: opportunityCorrected ?? false,
+    opportunityLookup,
+    ...(opportunityLookupDebug ? { opportunityLookupDebug } : {}),
+    writeTarget,
+    contactMirror,
+    opportunityMlsBackfill,
+    ghl,
+  };
+
+  if (!ghl.ok) {
+    res.status(502).json({
+      ...payload,
+      error: "ghl_write_failed",
+      message: ghl.message || "Could not save pay_link_url on GHL contact/opportunity.",
+    });
+    return;
+  }
+
+  void repairMissingPayLinksForContact(contactId).catch((err) => {
+    console.warn(
+      "[pay_link_auto_repair]",
+      err instanceof Error ? err.message : err
+    );
+  });
+
+  res.json(payload);
+});
+
+/**
+ * Same MLS URL as generate-pay-link; writes buy_leads_url (alias for workflows using that field).
+ */
+app.post("/api/generate-buy-leads-link", checkoutLimit, async (req: Request, res: Response) => {
+  const requiredToken = process.env.GENERATE_CHECKOUT_TOKEN?.trim();
+  if (requiredToken) {
+    const presented = String(req.header("x-webhook-token") || "").trim();
+    if (presented !== requiredToken) {
+      res.status(401).json({ error: "unauthorized", message: "Missing or invalid X-Webhook-Token header." });
+      return;
+    }
+  }
+
+  const parsed = ghlContactMlsLinkBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+    return;
+  }
+
+  const { contactId, opportunityId, mls: mlsBody, agentRole: agentRoleBody } = parsed.data;
+  const payLinkArgs = { contactId, opportunityId, mlsFromBody: mlsBody, roleFromBody: agentRoleBody };
+
+  opsLog("pay_link_request", {
+    contactId,
+    mlsBody: mlsBody ?? "",
+    opportunityIdBody: opportunityId ?? "",
+    agentRoleBody: agentRoleBody ?? "",
+  });
+
+  let mls: string;
+  try {
+    mls = await resolveMlsForPayLink(payLinkArgs);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "ghl_fetch_failed";
+    res.status(502).json({ error: "ghl_fetch_failed", message: msg });
+    return;
+  }
+
+  opsLog("pay_link_mls_resolved", { contactId, mls });
+
+  if (mls.length < 3) {
+    res.status(400).json({
+      error: "mls_required",
+      message: "Provide mls in the request body (e.g. {{inboundWebhookRequest.mls}}).",
+    });
+    return;
+  }
+
+  const {
+    opportunityId: resolvedOpportunityId,
+    lookup: opportunityLookup,
+    lookupDebug: opportunityLookupDebug,
+  } = await resolvePayLinkOpportunityId({ contactId, mls, opportunityId });
+
+  let agentRole;
+  let campaignPath;
+  try {
+    agentRole = await resolveAgentRoleForPayLink({
+      contactId,
+      opportunityId: resolvedOpportunityId ?? undefined,
+      roleFromBody: agentRoleBody,
+    });
+    campaignPath = await resolveCampaignPathForPayLink({
+      contactId,
+      opportunityId: resolvedOpportunityId ?? undefined,
+      roleFromBody: agentRoleBody,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "ghl_fetch_failed";
+    res.status(502).json({ error: "ghl_fetch_failed", message: msg });
+    return;
+  }
+
+  const buyField = process.env.GHL_BUY_LEADS_FIELD_KEY?.trim() || "buy_leads_url";
+  const payField = process.env.GHL_PAY_LINK_FIELD_KEY?.trim() || "pay_link_url";
+  const { url, trackedUrl, checkoutUrl, trackedFieldKeys, destinationFieldKeys, writeTarget, ghl, contactMirror } =
+    await writeGhlMlsCheckoutLink({
+      contactId,
+      opportunityId: resolvedOpportunityId ?? undefined,
+      mls,
+      agentRole,
+      campaignPath,
+      fieldKeys: [buyField],
+      destinationFieldKeys: payField !== buyField ? [payField] : [],
+    });
+
+  const opportunityMlsBackfill =
+    resolvedOpportunityId && opportunityLookupDebug?.reason
+      ? await backfillOpportunityMlsFromPayLink({
+          opportunityId: resolvedOpportunityId,
+          mls,
+          lookupReason: opportunityLookupDebug.reason,
+        })
+      : { attempted: false, ok: true, status: 204 };
+
+  opsLog("buy_leads_link_generated", {
+    contactId,
+    opportunityId: resolvedOpportunityId ?? "",
+    opportunityLookup,
+    writeTarget,
+    mls,
+    agentRole: agentRole ?? "",
+    ghlOk: ghl.ok,
+    contactMirrorOk: contactMirror?.ok,
+  });
+  res.json({
+    ok: true,
+    url,
+    trackedUrl,
+    checkoutUrl,
+    payLinkUrl: checkoutUrl,
+    destinationUrl: checkoutUrl,
+    trackedFieldKeys,
+    destinationFieldKeys,
+    mls,
+    agentRole: agentRole ?? null,
+    opportunityId: resolvedOpportunityId,
+    opportunityLookup,
+    ...(opportunityLookupDebug ? { opportunityLookupDebug } : {}),
+    writeTarget,
+    contactMirror,
+    opportunityMlsBackfill,
+    ghl,
+  });
+});
+
+/**
+ * Re-write pay_link_url, final_link_url, website_url, book_call_url for all opportunities on a contact.
+ * Use after welcome-email link breakage (e.g. links saved on Opportunity but emails read Contact fields).
+ */
+app.post("/api/refresh-welcome-links", checkoutLimit, async (req: Request, res: Response) => {
+  const requiredToken = process.env.GENERATE_CHECKOUT_TOKEN?.trim();
+  if (requiredToken) {
+    const presented = String(req.header("x-webhook-token") || "").trim();
+    if (presented !== requiredToken) {
+      res.status(401).json({ error: "unauthorized", message: "Missing or invalid X-Webhook-Token header." });
+      return;
+    }
+  }
+
+  const parsed = z
+    .object({ contactId: z.string().trim().min(1).max(120) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const result = await refreshWelcomeLinksForContact(parsed.data.contactId);
+    if (!result.refreshed.length) {
+      res.status(404).json({
+        error: "no_opportunities",
+        message: "No opportunities with MLS found for this contact.",
+        contactId: parsed.data.contactId,
+      });
+      return;
+    }
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "refresh_failed";
+    if (msg === "ghl_not_configured") {
+      res.status(503).json({ error: "ghl_not_configured" });
+      return;
+    }
+    res.status(502).json({ error: "refresh_failed", message: msg });
+  }
 });
 
 /** Search GHL contacts for Buy Leads (name, email, or phone). */
@@ -995,6 +1473,34 @@ app.get("/api/ghl-contacts/search", generalLimit, async (req: Request, res: Resp
   }
   try {
     const results = await searchGhlContacts(q, 12);
+    const first = results[0];
+    const kind = classifySearchQuery(q);
+    const page = searchCatchPageFromRequest(req);
+    const source = searchCatchSourceFromRequest(req);
+    const pagePath = searchCatchListingPath(page, searchCatchPagePathFromRequest(req), first?.mls ?? null);
+    safeRecordSearchCatch({
+      kind,
+      query: q,
+      page,
+      source,
+      pagePath,
+      resultCount: results.length,
+      matchedName: first?.name ?? null,
+      matchedEmail: first?.email ?? null,
+      matchedPhone: first?.phone ?? null,
+      matchedMls: first?.mls ?? null,
+    });
+    if (kind === "email" || kind === "phone") {
+      safePushWebsiteSearchToGhl({
+        kind,
+        query: q,
+        page,
+        existingContactId: first?.id ?? null,
+        existingName: first?.name ?? null,
+        existingEmail: first?.email ?? null,
+        existingPhone: first?.phone ?? null,
+      });
+    }
     res.json({ ok: true, results });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "search_failed";
@@ -1002,6 +1508,13 @@ app.get("/api/ghl-contacts/search", generalLimit, async (req: Request, res: Resp
       res.status(503).json({
         error: "ghl_not_configured",
         message: "Set GHL_BEARER_TOKEN and GHL_LOCATION_ID on the server.",
+      });
+      return;
+    }
+    if (/429|ghl_search_429|too many requests/i.test(msg)) {
+      res.status(429).json({
+        error: "too_many_requests",
+        message: "Too many searches right now — wait a moment and try again.",
       });
       return;
     }
@@ -1023,6 +1536,18 @@ app.get("/api/ghl-contacts/search-by-mls", generalLimit, async (req: Request, re
   }
   try {
     const results = await searchGhlContactsByMls(mls, 12);
+    const first = results[0];
+    safeRecordSearchCatch({
+      kind: "mls",
+      query: mls,
+      ...searchCatchContext(req, first?.mls ?? mls),
+      resultCount: results.length,
+      matchedName: first?.name ?? null,
+      matchedEmail: first?.email ?? null,
+      matchedPhone: first?.phone ?? null,
+      matchedMls: first?.mls ?? mls,
+    });
+    res.setHeader("Cache-Control", "private, max-age=60");
     res.json({ ok: true, results });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "search_failed";
@@ -1030,6 +1555,13 @@ app.get("/api/ghl-contacts/search-by-mls", generalLimit, async (req: Request, re
       res.status(503).json({
         error: "ghl_not_configured",
         message: "Set GHL_BEARER_TOKEN and GHL_LOCATION_ID on the server.",
+      });
+      return;
+    }
+    if (/429|ghl_search_429|too many requests/i.test(msg)) {
+      res.status(429).json({
+        error: "too_many_requests",
+        message: "Too many searches right now — wait a moment and try again.",
       });
       return;
     }
@@ -1046,7 +1578,9 @@ app.get("/api/ghl-contacts/:contactId/prefill", generalLimit, async (req: Reques
     return;
   }
   try {
-    const prefill = await fetchGhlContactPrefill(contactId);
+    const mlsQ = String(req.query.mls || "").trim();
+    const prefill = await fetchGhlContactPrefill(contactId, mlsQ || undefined);
+    res.setHeader("Cache-Control", "private, max-age=60");
     res.json({ ok: true, prefill });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "prefill_failed";
@@ -1060,6 +1594,27 @@ app.get("/api/ghl-contacts/:contactId/prefill", generalLimit, async (req: Reques
     }
     console.error("ghl_contact_prefill", msg);
     res.status(502).json({ error: "ghl_prefill_failed", message: msg });
+  }
+});
+
+/** List opportunities on a contact with pay links — multi-listing verification. */
+app.get("/api/ghl-contacts/:contactId/opportunities", generalLimit, async (req: Request, res: Response) => {
+  const contactId = String(req.params.contactId || "").trim();
+  if (!contactId || contactId.length > 64) {
+    res.status(400).json({ error: "invalid_contact_id" });
+    return;
+  }
+  try {
+    const opportunities = await listContactOpportunitiesSummary(contactId, 50);
+    res.json({ ok: true, contactId, count: opportunities.length, opportunities });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "list_failed";
+    if (msg === "ghl_not_configured") {
+      res.status(503).json({ error: "ghl_not_configured" });
+      return;
+    }
+    console.error("ghl_contact_opportunities", msg);
+    res.status(502).json({ error: "ghl_opportunities_failed", message: msg });
   }
 });
 
@@ -1103,8 +1658,8 @@ app.get("/api/ghl-contact/:contactId", generalLimit, async (req: Request, res: R
 const checkoutFromContactBody = z.object({
   contactId: z.string().trim().min(1).max(120),
   t: z.string().trim().min(1).max(64),
-  serviceLine: z.enum(["ai_outreach", "live_callers", "hybrid", "data_only"]),
-  leadTier: z.enum(["dabble", "starter", "growth", "scale"]),
+  serviceLine: z.enum(["ai_outreach", "live_callers", "hybrid", "data_only", "mailers"]),
+  leadTier: z.enum(["dabble", "starter", "growth", "scale", "dominate"]),
   homes: z.coerce.number().int().positive().max(50_000),
   radiusLabel: z.string().trim().max(80).optional(),
   promoCode: z.string().trim().max(40).optional(),
@@ -1198,6 +1753,12 @@ app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: 
           zip: contact.fields.zip_code || "",
           mls: contact.fields.mls || "",
           listingAddress: contact.fields.listing_address || "",
+          firstName: contact.firstName || contact.fields.first_name || "",
+          lastName: contact.lastName || contact.fields.last_name || "",
+          agentName:
+            [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim() ||
+            contact.fields.realtor_name ||
+            "",
           promoCode: activePromo || "",
         },
       },
@@ -1215,6 +1776,21 @@ app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: 
   }
 
   opsLog("pay_link_checkout_created", { sessionId: session.id, contactId, totalCents });
+  const payMls = (contact.fields.mls || "").trim();
+  const payAddress = (contact.fields.listing_address || "").trim();
+  safeRecordCheckoutStarted({
+    sessionId: session.id,
+    source: "pay_link",
+    checkoutType: "ghl_pay_link",
+    serviceLine,
+    leadTier,
+    requestedLeads: homes,
+    amountCents: totalCents,
+    customerEmail,
+    mls: payMls || null,
+    listingAddress: payAddress || null,
+    pagePath: listingFunnelPagePath({ mls: payMls }),
+  });
   res.json({ ok: true, url: session.url, sessionId: session.id, totalCents });
 });
 
@@ -1224,8 +1800,25 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
     res.status(400).json({ error: "invalid body", details: parsed.error.flatten() });
     return;
   }
-  const { serviceLine, leadTier, email, phone, city, county, zip, radiusMiles, requestedLeads, campaignType, agentRole, promoCode } =
-    parsed.data;
+  const {
+    serviceLine,
+    leadTier,
+    email,
+    phone,
+    city,
+    county,
+    zip,
+    radiusMiles,
+    requestedLeads,
+    campaignType,
+    agentRole,
+    promoCode,
+    mls,
+    listingAddress,
+    agentName,
+    brokerage,
+    radiusLabel: radiusRingLabel,
+  } = parsed.data;
   const phoneDigits = normalizePhoneDigits(phone);
   if (phoneDigits.length < 10) {
     res.status(400).json({ error: "invalid_phone", message: "Phone must include at least 10 digits." });
@@ -1275,8 +1868,8 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
   const base = getPublicBaseUrl();
   const idem = crypto.randomUUID().replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
   const locationLabel = [city, county, zip].filter(Boolean).join(", ");
-  const radiusLabel = radiusMiles ? `${radiusMiles} mi` : "";
-  const targetingLabel = [locationLabel, radiusLabel].filter(Boolean).join(" • ");
+  const radiusMilesLabel = radiusMiles ? `${radiusMiles} mi` : "";
+  const targetingLabel = [locationLabel, radiusRingLabel || radiusMilesLabel].filter(Boolean).join(" • ");
   const tierLabel = tierRowMeta(tier).packageLabel;
   const campaignLabel =
     campaignType === "just_sold" ? "Just sold" : campaignType === "just_listed" ? "Just listed" : "";
@@ -1322,6 +1915,13 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
         campaignType: campaignType ?? "",
         agentRole: agentRole ?? "",
         promoCode: activePromo || "",
+        mls: resolveRealMls(mls) || "",
+        listingAddress: listingAddress || "",
+        agentName: agentName || "",
+        firstName: splitPersonName(agentName || "").firstName,
+        lastName: splitPersonName(agentName || "").lastName,
+        brokerage: brokerage || "",
+        radiusLabel: radiusRingLabel || "",
       },
     },
     { idempotencyKey: `lead-${requestedLeads}-${serviceLine}-${leadTier}-${email}-${idem}`.slice(0, 90) }
@@ -1331,6 +1931,19 @@ app.post("/api/checkout/leads", checkoutLimit, async (req: Request, res: Respons
     return;
   }
   opsLog("checkout_lead_session_created", { sessionId: session.id, requestedLeads });
+  safeRecordCheckoutStarted({
+    sessionId: session.id,
+    source: "buy_leads",
+    checkoutType: "lead_pack",
+    serviceLine,
+    leadTier,
+    requestedLeads,
+    amountCents: unitAmountCents,
+    customerEmail: email,
+    mls: mls || null,
+    listingAddress: listingAddress || null,
+    pagePath: listingFunnelPagePath({ mls, campaignType, agentRole }),
+  });
   res.json({ url: session.url, sessionId: session.id, unitAmountCents });
 });
 
@@ -1704,7 +2317,30 @@ app.post("/api/checkout", checkoutLimit, async (req: Request, res: Response) => 
     res.status(500).json({ error: "no checkout url" });
     return;
   }
+  safeRecordCheckoutStarted({
+    sessionId: session.id,
+    source: "campaign",
+    checkoutType: "campaign",
+    requestedLeads: homeCount,
+    amountCents,
+    customerEmail: buyerEmail || null,
+  });
   res.json({ url: session.url, sessionId: session.id, amountCents });
+});
+
+app.get("/api/public/intro-eligibility", generalLimit, (req, res) => {
+  void handleIntroEligibility(req, res);
+});
+
+app.post("/api/checkout/intro-campaign", checkoutLimit, (req, res) => {
+  void handleIntroCampaignCheckout(req, res);
+});
+
+app.get("/api/intro/listing-snapshot", generalLimit, (req, res) => {
+  void handleIntroListingSnapshotGet(req, res);
+});
+app.post("/api/intro/listing-snapshot", generalLimit, (req, res) => {
+  void handleIntroListingSnapshotPut(req, res);
 });
 
 /** Avoid Express’s default HTML “Cannot POST /api/…” — the SPA treats non-JSON as a Hosting/rewrite failure. */

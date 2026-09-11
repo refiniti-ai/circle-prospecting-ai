@@ -5,9 +5,8 @@ import { BrandLogo } from "./BrandLogo";
 
 const navItems = [
   { to: "/leads", label: "Product" },
-  { to: "/how-it-works", label: "Features" },
+  { to: "/how-it-works", label: "How it Works" },
   { to: "/campaign-pricing", label: "Pricing" },
-  { to: "/coverage", label: "Coverage" },
   { to: "/contact", label: "Contact" },
 ];
 

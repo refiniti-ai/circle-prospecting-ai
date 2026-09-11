@@ -22,7 +22,7 @@ export function contactAddressLines(): string[] {
 
 export function contactPhoneDisplay(): string | null {
   const p = import.meta.env.VITE_CONTACT_PHONE?.trim();
-  return p || null;
+  return p || "727-301-6290";
 }
 
 export type ContactSocialLink = { label: string; href: string; icon: "linkedin" | "x" | "facebook" | "instagram" };

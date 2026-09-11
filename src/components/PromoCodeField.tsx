@@ -42,22 +42,18 @@ export function PromoCodeField({ value, onChange, onApply, appliedCode, disabled
             disabled={disabled}
             autoComplete="off"
             placeholder="Enter your promo code"
-            aria-describedby="buy-promo-hint"
+            aria-describedby={appliedCode ? "buy-promo-hint" : undefined}
           />
           <button type="button" className="btn btn-ghost buy-promo-apply" disabled={disabled} onClick={apply}>
             Apply
           </button>
         </div>
       </label>
-      <p id="buy-promo-hint" className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
-        {appliedCode ? (
-          <>
-            <strong>{appliedCode}</strong> applied — <strong>$0.50</strong> per home.
-          </>
-        ) : (
-          <>Beta rate: <strong>$0.50</strong> per home on all plans.</>
-        )}
-      </p>
+      {appliedCode ? (
+        <p id="buy-promo-hint" className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
+          <strong>{appliedCode}</strong> applied.
+        </p>
+      ) : null}
     </div>
   );
 }

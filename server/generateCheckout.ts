@@ -4,6 +4,7 @@ import axios from "axios";
 import Stripe from "stripe";
 import { z } from "zod";
 import { opsLog } from "./opsLog.js";
+import { recordCheckoutStarted } from "./checkoutFunnelStore.js";
 import { productionSiteBase } from "../src/lib/siteUrl.js";
 
 /**
@@ -232,6 +233,18 @@ export function createGenerateCheckoutHandler() {
       amountCents,
       ghlMode: ghl.mode,
     });
+
+    try {
+      recordCheckoutStarted({
+        sessionId: session.id,
+        source: "ghl_generated",
+        checkoutType: "ghl_generated",
+        amountCents,
+        customerEmail: email,
+      });
+    } catch (err) {
+      console.error("[checkoutFunnel] recordCheckoutStarted failed", err);
+    }
 
     res.json({
       ok: true,

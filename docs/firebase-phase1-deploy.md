@@ -79,7 +79,8 @@ Set these on the API process:
 - `ADMIN_USERNAME=...` / `ADMIN_PASSWORD=...` (admin UI login; JWT signed with `DASHBOARD_JWT_SECRET`)
 - `DASHBOARD_JWT_SECRET=...` (32+ random chars in production; used for client dashboard + admin session JWT)
 - Optional legacy scripts: `ADMIN_API_KEY=...` (static Bearer; browser admin no longer needs this)
-- `PURCHASE_NOTIFICATION_EMAIL=you@yourdomain.com`
+- `PURCHASE_NOTIFICATION_EMAIL=info@circleprospecting.ai` (internal alert on each purchase)
+- See [ghl-purchase-receipt-workflow.md](./ghl-purchase-receipt-workflow.md) for customer receipt + GHL Send Email mapping
 
 Optional:
 

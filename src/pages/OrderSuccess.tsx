@@ -8,6 +8,7 @@ import { apiBase } from "../lib/apiBase";
 import { clearPendingCheckoutSessionId, rememberCheckoutSessionId } from "../lib/checkoutSessionBridge";
 import { setClientPasswordFromSession, syncPaidCheckoutSession } from "../lib/leadsApi";
 import { notifyError, notifyWarning } from "../lib/notify";
+import { trackMetaPurchase } from "../lib/metaPixel";
 
 const TOKEN_KEY = "cpai_dash_jwt";
 
@@ -87,6 +88,16 @@ export function OrderSuccess() {
           { id: "order-success-sync" }
         );
       }
+    });
+  }, [sessionId, info]);
+
+  useEffect(() => {
+    if (!sessionId || !info || info.paymentStatus !== "paid") return;
+    trackMetaPurchase({
+      eventId: sessionId,
+      valueCents: info.amountTotalCents,
+      currency: info.currency,
+      orderId: info.orderNumber,
     });
   }, [sessionId, info]);
 

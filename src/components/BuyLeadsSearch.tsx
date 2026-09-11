@@ -1,23 +1,39 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { AddressAutocompleteInput } from "./AddressAutocompleteInput";
 import {
   fetchGhlContactPrefill,
   geocodeAddressLine,
+  MultipleGhlMlsHitsError,
+  resolveListingByMls,
   searchGhlContacts,
-  searchGhlContactsByMls,
-  searchListingByMls,
   type GhlContactSearchHit,
+  ghlSearchUserMessage,
 } from "../lib/buyLeadsSearchApi";
+import { geocodeUserMessage } from "../lib/geocodeAddress";
+import {
+  agentRoleFromGhlHit,
+  agentRoleFromListingPayload,
+  campaignPathFromListingPayload,
+  ghlHitAgentLabel,
+  resolveGhlHitsForSearch,
+} from "../lib/ghlContactRole";
+import { resolveCampaignPath } from "../lib/mlsCampaignPath";
+import type { ListingAgentRole } from "../lib/listingAgents";
+import { buildMlsLeadsUrl } from "../lib/mlsUrl";
 import type { ParsedPlaceAddress } from "../lib/placesAddress";
 import type { ListingFormValues, ListingPayload } from "../lib/listingData";
-import { buildDraftListingFromForm, ghlHitToListingForm } from "../lib/listingDraft";
-import { formatListingDisplayAddress, listingAddressGeocodeQuery, parseListingAddressLine } from "../lib/listingData";
+import { buildListingFromGhlPrefill, ghlHitToListingForm } from "../lib/listingDraft";
+import {
+  formatListingDisplayAddress,
+  parseListingAddressLine,
+} from "../lib/listingData";
 
 export type BuyLeadsSearchResult =
   | { kind: "listing"; listing: ListingPayload }
   | { kind: "address"; form: ListingFormValues; geo: { lat: number; lng: number; county: string } };
 
-type Tab = "listing" | "agent";
+type SearchMode = "listing" | "agent";
 
 function searchStatusClass(message: string): string {
   const base = "buy-search-status";
@@ -26,6 +42,7 @@ function searchStatusClass(message: string): string {
     return `${base} buy-search-status--notice`;
   }
   if (
+    m.includes("geocode_") ||
     m.includes("no ") ||
     m.includes("could not") ||
     m.includes("failed") ||
@@ -35,7 +52,10 @@ function searchStatusClass(message: string): string {
   ) {
     return `${base} buy-search-status--warn`;
   }
-  if (m.includes("loaded") || m.includes("found") || m.includes("updated") || m.includes("selected")) {
+  if (
+    (m.includes("loaded") || m.includes("updated") || m.includes("selected") || m.includes("found")) &&
+    !m.includes("not found")
+  ) {
     return `${base} buy-search-status--success`;
   }
   return base;
@@ -43,19 +63,69 @@ function searchStatusClass(message: string): string {
 
 type Props = {
   disabled?: boolean;
+  initialMls?: string;
+  /** Sync property address when a listing loads from URL / GHL (not user typing). */
+  prefillAddress?: string;
+  /** Multiple GHL contacts for same MLS (from URL auto-load). */
+  pendingListingHits?: GhlContactSearchHit[];
+  pendingListingHitsMessage?: string;
+  /** From /buyer/mls/… or /seller/mls/… — only show that agent type in MLS search. */
+  searchAgentRole?: ListingAgentRole | null;
+  /** From ?c= on welcome link — prefer this contact when filtering. */
+  contactIdFromUrl?: string | null;
+  /** Optional override — defaults to agent-first search. */
+  defaultMode?: SearchMode;
+  heading?: string;
+  introText?: ReactNode;
+  className?: string;
+  agentFieldLabel?: string;
+  agentPlaceholder?: string;
+  agentHint?: string;
+  agentSearchButtonLabel?: string;
+  /** When false, loaded listings stay on this page via onResult (intro funnel). Default true = navigate to /buy-leads MLS URL. */
+  navigateOnResult?: boolean;
+  /** When set, agent pick navigates here instead of loading a listing inline (buy-leads entry). */
+  onAgentPick?: (hit: GhlContactSearchHit) => void;
   onResult: (result: BuyLeadsSearchResult) => void;
   onError?: (message: string) => void;
+  onBusyChange?: (busy: boolean) => void;
 };
 
-export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
-  const [tab, setTab] = useState<Tab>("listing");
-  const [mls, setMls] = useState("");
+export function BuyLeadsSearch({
+  disabled,
+  initialMls,
+  prefillAddress,
+  pendingListingHits,
+  pendingListingHitsMessage,
+  searchAgentRole,
+  contactIdFromUrl,
+  defaultMode = "agent",
+  heading = "Search for Your Listing",
+  introText,
+  className,
+  agentFieldLabel = "Agent name, email, or phone",
+  agentPlaceholder = "Maria Garcia or maria@… or 727-555-0100",
+  agentHint = "Search your GoHighLevel contacts by name, email, or phone — then pick a match to pre-fill the order.",
+  agentSearchButtonLabel = "Find agent",
+  navigateOnResult = true,
+  onAgentPick,
+  onResult,
+  onError,
+  onBusyChange,
+}: Props) {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<SearchMode>(defaultMode);
+  const [mls, setMls] = useState(initialMls?.trim() ?? "");
   const [addressLine, setAddressLine] = useState("");
   const [agentQuery, setAgentQuery] = useState("");
   const [busy, setBusy] = useState(false);
-  const [agentHits, setAgentHits] = useState<GhlContactSearchHit[]>([]);
   const [listingHits, setListingHits] = useState<GhlContactSearchHit[]>([]);
+  const [agentHits, setAgentHits] = useState<GhlContactSearchHit[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   const reportError = useCallback(
     (msg: string) => {
@@ -66,7 +136,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
   );
 
   const applyGhlContact = useCallback(
-    async (hit: GhlContactSearchHit, source: "agent" | "listing") => {
+    async (hit: GhlContactSearchHit) => {
       setBusy(true);
       setStatus(null);
       setListingHits([]);
@@ -77,31 +147,62 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
         if (full.mls) setMls(full.mls);
         setAddressLine(formatListingDisplayAddress(form));
 
-        let geo = { lat: 28.0356, lng: -82.7743, county: "Pinellas" };
-        const geoQuery = listingAddressGeocodeQuery(form) || full.listingAddress?.trim() || "";
-        let mapNote: string | null = null;
-        if (geoQuery.length >= 8) {
-          try {
-            geo = await geocodeAddressLine(geoQuery);
-          } catch {
-            mapNote = "Contact loaded — refine the address if the map looks wrong.";
-          }
+        const draft = buildListingFromGhlPrefill(full);
+        const mlsId = (full.mls || form.mls).trim();
+        const campaignPath = resolveCampaignPath({
+          listingType: full.listingType,
+          agentType: full.agentType,
+          agentRole: agentRoleFromGhlHit(full) ?? undefined,
+        });
+        setStatus(`Loaded ${full.name || "listing"}${full.mls ? ` · MLS ${full.mls}` : ""}.`);
+        if (mlsId && navigateOnResult) {
+          navigate(
+            buildMlsLeadsUrl(mlsId, { campaignPath }),
+            { replace: true, state: { preloadedListing: draft } }
+          );
+        } else {
+          onResult({ kind: "listing", listing: draft });
         }
-
-        const draft = buildDraftListingFromForm(form, geo);
-        const label = full.name || "contact";
-        setStatus(
-          mapNote ||
-            `Loaded ${label}${source === "listing" && full.mls ? ` · MLS ${full.mls}` : ""}.`
-        );
-        onResult({ kind: "listing", listing: draft });
       } catch (e) {
-        reportError(e instanceof Error ? e.message : "Could not load contact.");
+        reportError(geocodeUserMessage(e));
       } finally {
         setBusy(false);
       }
     },
-    [onResult, reportError]
+    [navigate, navigateOnResult, onResult, reportError]
+  );
+
+  const handleMultipleMlsHits = useCallback(
+    (hits: GhlContactSearchHit[], mlsQ: string) => {
+      const { visible, autoPick } = resolveGhlHitsForSearch(hits, {
+        agentRole: searchAgentRole,
+        contactId: contactIdFromUrl,
+      });
+      if (autoPick) {
+        void applyGhlContact(autoPick);
+        return;
+      }
+      if (!visible.length) {
+        const roleHint =
+          searchAgentRole === "buyer"
+            ? "buyer's agent"
+            : searchAgentRole === "seller"
+              ? "listing agent"
+              : "agent";
+        reportError(
+          `No ${roleHint} record found for MLS ${mlsQ}. Open the personalized link from your welcome email, or search by your name under By agent.`
+        );
+        return;
+      }
+      setListingHits(visible);
+      const roleNote = searchAgentRole
+        ? searchAgentRole === "buyer"
+          ? " (buyer's agent)"
+          : " (listing agent)"
+        : "";
+      setStatus(`${visible.length} match${visible.length === 1 ? "" : "es"} for MLS ${mlsQ}${roleNote} — select one below.`);
+    },
+    [applyGhlContact, contactIdFromUrl, reportError, searchAgentRole]
   );
 
   const onFindListing = useCallback(async () => {
@@ -114,33 +215,45 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
 
     setBusy(true);
     setStatus(null);
-    setAgentHits([]);
     setListingHits([]);
+    setAgentHits([]);
 
     try {
       if (mlsQ) {
         try {
-          const listing = await searchListingByMls(mlsQ);
+          const listing = await resolveListingByMls(mlsQ, {
+            agentRole: searchAgentRole,
+            contactId: contactIdFromUrl,
+            autoPickMultiple: Boolean(searchAgentRole || contactIdFromUrl),
+          });
+          const campaignPath =
+            campaignPathFromListingPayload(listing) ??
+            resolveCampaignPath({
+              listingType: listing.listingType,
+              agentType: listing.agentType,
+              agentRole: agentRoleFromListingPayload(listing) ?? searchAgentRole ?? undefined,
+            });
           setStatus(`Loaded listing ${listing.mls}.`);
-          onResult({ kind: "listing", listing });
+          if (navigateOnResult) {
+            navigate(
+              buildMlsLeadsUrl(listing.mls, { campaignPath }),
+              { replace: true, state: { preloadedListing: listing } }
+            );
+          } else {
+            onResult({ kind: "listing", listing });
+          }
           return;
-        } catch {
-          try {
-            const hits = await searchGhlContactsByMls(mlsQ);
-            if (hits.length > 0) {
-              if (hits.length === 1) {
-                await applyGhlContact(hits[0]!, "listing");
-                return;
-              }
-              setListingHits(hits);
-              setStatus(`${hits.length} matches for MLS ${mlsQ} — select one below.`);
-              return;
-            }
-          } catch (e) {
-            console.warn("[buy-leads] MLS GHL search failed", e);
+        } catch (e) {
+          if (e instanceof MultipleGhlMlsHitsError) {
+            handleMultipleMlsHits(e.hits, mlsQ);
+            return;
           }
           if (!addrQ) {
-            reportError(`No listing found for MLS ${mlsQ}. Try address search or enter details manually below.`);
+            reportError(
+              e instanceof Error && !e.message.startsWith("geocode_")
+                ? e.message
+                : `No GHL contact found for MLS ${mlsQ}. Add the MLS on the contact in GoHighLevel, or enter the property address.`
+            );
             return;
           }
         }
@@ -159,14 +272,76 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
         zip: parsed.zip,
       };
       const geo = await geocodeAddressLine(addrQ);
-      setStatus("Address loaded — map and campaign fields updated.");
+      setStatus("Address loaded — map and checkout fields updated.");
       onResult({ kind: "address", form, geo });
     } catch (e) {
-      reportError(e instanceof Error ? e.message : "Address search failed.");
+      reportError(geocodeUserMessage(e));
     } finally {
       setBusy(false);
     }
-  }, [addressLine, applyGhlContact, mls, onResult, reportError]);
+  }, [addressLine, contactIdFromUrl, handleMultipleMlsHits, mls, navigate, navigateOnResult, onResult, reportError, searchAgentRole]);
+
+  const onAgentSearch = useCallback(async () => {
+    const q = agentQuery.trim();
+    if (q.length < 2) {
+      reportError("Enter at least 2 characters (name, email, or phone).");
+      return;
+    }
+
+    setBusy(true);
+    setStatus(null);
+    setListingHits([]);
+    setAgentHits([]);
+
+    try {
+      const hits = await searchGhlContacts(q);
+      setAgentHits(hits);
+      if (!hits.length) {
+        setStatus("No contacts matched. Try a different name, email, or phone.");
+      } else {
+        setStatus(`${hits.length} contact${hits.length === 1 ? "" : "s"} found — select one below.`);
+      }
+    } catch (e) {
+      reportError(ghlSearchUserMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [agentQuery, reportError]);
+
+  useEffect(() => {
+    const id = initialMls?.trim() ?? "";
+    if (id) setMls(id);
+  }, [initialMls]);
+
+  useEffect(() => {
+    const line = prefillAddress?.trim() ?? "";
+    if (line) setAddressLine(line);
+  }, [prefillAddress]);
+
+  useEffect(() => {
+    if (!pendingListingHits?.length) return;
+    setMode("listing");
+    const { visible, autoPick } = resolveGhlHitsForSearch(pendingListingHits, {
+      agentRole: searchAgentRole,
+      contactId: contactIdFromUrl,
+    });
+    if (autoPick) {
+      void applyGhlContact(autoPick);
+      return;
+    }
+    if (!visible.length) return;
+    setListingHits(visible);
+    setStatus(
+      pendingListingHitsMessage ??
+        `${visible.length} match${visible.length === 1 ? "" : "es"} — select one below.`
+    );
+  }, [
+    applyGhlContact,
+    contactIdFromUrl,
+    pendingListingHits,
+    pendingListingHitsMessage,
+    searchAgentRole,
+  ]);
 
   const onAddressPlace = useCallback(
     (place: ParsedPlaceAddress) => {
@@ -182,7 +357,7 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
         zip: place.zip,
       };
       setAddressLine(place.formattedAddress);
-      setStatus("Address selected — loading map and campaign fields.");
+      setStatus("Address selected — click Find listing to load the campaign.");
       onResult({
         kind: "address",
         form,
@@ -192,110 +367,114 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
     [mls, onResult]
   );
 
-  const onAgentSearch = useCallback(async () => {
-    const q = agentQuery.trim();
-    if (q.length < 2) {
-      reportError("Enter at least 2 characters (name, email, or phone).");
-      return;
-    }
-    setBusy(true);
-    setStatus(null);
-    setAgentHits([]);
-    try {
-      const hits = await searchGhlContacts(q);
-      setAgentHits(hits);
-      if (!hits.length) setStatus("No contacts matched. Try a different name, email, or phone.");
-      else setStatus(`${hits.length} contact${hits.length === 1 ? "" : "s"} found.`);
-    } catch (e) {
-      reportError(e instanceof Error ? e.message : "Agent search failed.");
-    } finally {
-      setBusy(false);
-    }
-  }, [agentQuery, reportError]);
-
-  const onPickAgent = useCallback(
+  const onPickListingHit = useCallback(
     (hit: GhlContactSearchHit) => {
-      void applyGhlContact(hit, "agent");
+      void applyGhlContact(hit);
     },
     [applyGhlContact]
   );
 
-  const onPickListingHit = useCallback(
+  const onPickAgentHit = useCallback(
     (hit: GhlContactSearchHit) => {
-      void applyGhlContact(hit, "listing");
+      if (onAgentPick) {
+        onAgentPick(hit);
+        return;
+      }
+      void applyGhlContact(hit);
     },
-    [applyGhlContact]
+    [applyGhlContact, onAgentPick]
+  );
+
+  const switchMode = useCallback((next: SearchMode) => {
+    setMode(next);
+    setStatus(null);
+    setListingHits([]);
+    setAgentHits([]);
+  }, []);
+
+  const resolvedIntro = introText ?? (
+    <>
+      Find a property by <strong>MLS #</strong> or <strong>address</strong>.
+    </>
   );
 
   return (
-    <section className="buy-search section-surface buy-card" aria-label="Search your listing">
-      <h2 className="premium-h2" style={{ marginBottom: "0.35rem" }}>
-        Search your just listed or just sold listing
-      </h2>
-      <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.92rem", lineHeight: 1.5 }}>
-        Find a property by <strong>MLS #</strong> or <strong>address</strong>, or pull an agent from your{" "}
-        <strong>GoHighLevel</strong> database by name, email, or phone.
-      </p>
+    <section
+      className={`buy-search section-surface buy-card${className ? ` ${className}` : ""}`}
+      aria-label="Search for your listing"
+    >
+      {heading.trim() ? <h2 className="premium-h2">{heading}</h2> : null}
+      <p className="buy-search-intro muted">{resolvedIntro}</p>
 
-      <div className="buy-search-tabs" role="tablist" aria-label="Search mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "listing"}
-          className={`buy-search-tab${tab === "listing" ? " is-active" : ""}`}
-          onClick={() => setTab("listing")}
-          disabled={disabled || busy}
-        >
-          By listing
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "agent"}
-          className={`buy-search-tab${tab === "agent" ? " is-active" : ""}`}
-          onClick={() => setTab("agent")}
-          disabled={disabled || busy}
-        >
+      <fieldset className="buy-search-mode" aria-label="Search mode">
+        <label className="buy-search-mode__option">
+          <input
+            type="radio"
+            name="buy-search-mode"
+            checked={mode === "agent"}
+            disabled={disabled || busy}
+            onChange={() => switchMode("agent")}
+          />
           By agent
-        </button>
-      </div>
+        </label>
+        <label className="buy-search-mode__option">
+          <input
+            type="radio"
+            name="buy-search-mode"
+            checked={mode === "listing"}
+            disabled={disabled || busy}
+            onChange={() => switchMode("listing")}
+          />
+          By listing
+        </label>
+      </fieldset>
 
-      {tab === "listing" ? (
+      {mode === "listing" ? (
         <div className="buy-search-panel">
-          <div className="buy-search-row">
-            <label className="cp-form-grid buy-search-field">
-              <span className="muted-label">MLS #</span>
+          <div className="buy-search-row buy-search-row--listing">
+            <label className="cp-form-grid buy-search-field buy-search-field--mls">
+              <span className="muted-label buy-search-label">MLS #</span>
               <input
                 type="text"
-                className="premium-input"
+                className="premium-input buy-search-input"
                 value={mls}
                 onChange={(e) => setMls(e.target.value)}
-                placeholder="TB8502524"
+                placeholder="TB88604696"
                 disabled={disabled || busy}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void onFindListing();
                 }}
               />
             </label>
-            <button type="button" className="btn btn-primary buy-search-btn" disabled={disabled || busy} onClick={() => void onFindListing()}>
-              Find listing
+            <span className="buy-search-or-inline muted" aria-hidden>
+              or
+            </span>
+            <label className="cp-form-grid buy-search-field buy-search-field--address">
+              <span className="muted-label buy-search-label">Property address</span>
+              <AddressAutocompleteInput
+                value={addressLine}
+                onChange={setAddressLine}
+                onPlaceSelect={onAddressPlace}
+                disabled={disabled || busy}
+                placeholder="Start typing street address…"
+                onEnter={() => void onFindListing()}
+                className="premium-input buy-search-input"
+              />
+            </label>
+            <button
+              type="button"
+              className={`btn btn-primary buy-search-btn${busy ? " buy-search-btn--loading" : ""}`}
+              disabled={disabled || busy}
+              aria-busy={busy}
+              onClick={() => void onFindListing()}
+            >
+              {busy ? (
+                <span className="cp-loading-line buy-search-btn__loading">Loading listing…</span>
+              ) : (
+                "Find listing"
+              )}
             </button>
           </div>
-          <p className="buy-search-or muted">or</p>
-          <label className="cp-form-grid">
-            <span className="muted-label">Property address</span>
-            <AddressAutocompleteInput
-              value={addressLine}
-              onChange={setAddressLine}
-              onPlaceSelect={onAddressPlace}
-              disabled={disabled || busy}
-              placeholder="Start typing street address…"
-              onEnter={() => void onFindListing()}
-            />
-          </label>
-          <p className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
-            Type a street address for suggestions, or enter the full address in Step 1 below.
-          </p>
           {listingHits.length > 0 ? (
             <ul className="buy-search-hits">
               {listingHits.map((hit) => (
@@ -306,7 +485,10 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
                     disabled={disabled || busy}
                     onClick={() => onPickListingHit(hit)}
                   >
-                    <strong>{hit.mls ? `MLS ${hit.mls}` : "Listing match"}</strong>
+                    <strong>
+                      {hit.mls ? `MLS ${hit.mls}` : "Listing match"}
+                      <span className="buy-search-hit__role"> · {ghlHitAgentLabel(hit)}</span>
+                    </strong>
                     <span>
                       {[hit.name, hit.listingAddress, hit.email, hit.phone].filter(Boolean).join(" · ")}
                     </span>
@@ -315,42 +497,61 @@ export function BuyLeadsSearch({ disabled, onResult, onError }: Props) {
               ))}
             </ul>
           ) : null}
+          <p className="buy-search-hint muted">
+            MLS or street address — suggestions appear as you type. You can also edit the full address in Step 1 below.
+          </p>
         </div>
       ) : (
         <div className="buy-search-panel">
-          <div className="buy-search-row">
-            <label className="cp-form-grid buy-search-field">
-              <span className="muted-label">Agent name, email, or phone</span>
+          <div className="buy-search-row buy-search-row--agent">
+            <label className="cp-form-grid buy-search-field buy-search-field--agent">
+              <span className="muted-label buy-search-label">{agentFieldLabel}</span>
               <input
                 type="search"
-                className="premium-input"
+                className="premium-input buy-search-input"
                 value={agentQuery}
                 onChange={(e) => setAgentQuery(e.target.value)}
-                placeholder="Maria Garcia or maria@… or 727-555-0100"
+                placeholder={agentPlaceholder}
                 disabled={disabled || busy}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void onAgentSearch();
                 }}
               />
             </label>
-            <button type="button" className="btn btn-primary buy-search-btn" disabled={disabled || busy} onClick={() => void onAgentSearch()}>
-              Find agent
+            <button
+              type="button"
+              className={`btn btn-primary buy-search-btn${busy ? " buy-search-btn--loading" : ""}`}
+              disabled={disabled || busy}
+              aria-busy={busy}
+              onClick={() => void onAgentSearch()}
+            >
+              {busy ? (
+                <span className="cp-loading-line buy-search-btn__loading">Searching…</span>
+              ) : (
+                agentSearchButtonLabel
+              )}
             </button>
           </div>
           {agentHits.length > 0 ? (
             <ul className="buy-search-hits">
               {agentHits.map((hit) => (
                 <li key={hit.id}>
-                  <button type="button" className="buy-search-hit" disabled={disabled || busy} onClick={() => void onPickAgent(hit)}>
-                    <strong>{hit.name}</strong>
-                    <span>
-                      {[hit.email, hit.phone, hit.mls ? `MLS ${hit.mls}` : null, hit.listingAddress].filter(Boolean).join(" · ")}
+                  <button
+                    type="button"
+                    className="buy-search-hit"
+                    disabled={disabled || busy}
+                    onClick={() => onPickAgentHit(hit)}
+                  >
+                    <strong className="buy-search-hit__name">{hit.name}</strong>
+                    <span className="buy-search-hit__meta">
+                      {[hit.email, hit.phone].filter(Boolean).join(" · ")}
                     </span>
                   </button>
                 </li>
               ))}
             </ul>
           ) : null}
+          <p className="buy-search-hint muted">{agentHint}</p>
         </div>
       )}
 

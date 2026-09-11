@@ -1,8 +1,10 @@
 import { SeoHead, JsonLdOrg, JsonLdSite } from "../components/SeoHead";
+import { SITE_META_DESCRIPTION, SITE_OG_DESCRIPTION } from "../lib/siteMeta";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { PricingProductSheetSection } from "../components/marketing/PosterSections";
 import { BrokerageTrustCarousel } from "../components/marketing/BrokerageTrustCarousel";
+import { IntroCampaignPromoBand } from "../components/intro/IntroCampaignPromoBand";
 import {
   RzEditorialHero,
   RzPositioningStrip,
@@ -22,7 +24,8 @@ export function Home() {
     <>
       <SeoHead
         title="Circle Prospecting AI | We Call Your Market — Conversations & Appointments"
-        description="We contact homeowners around your Just Listed and Just Sold properties using live callers, AI calls, and ringless voicemail to promote you as the trusted local expert in the neighborhood."
+        description={SITE_META_DESCRIPTION}
+        shareDescription={SITE_OG_DESCRIPTION}
         path="/"
       />
       <JsonLdSite />
@@ -30,6 +33,7 @@ export function Home() {
       <div className="app-shell rz-shell rz-app">
         <SiteHeader />
         <main id="main-content" className="home-main rz-home-rez" tabIndex={-1}>
+          <IntroCampaignPromoBand />
           <RzEditorialHero />
           <BrokerageTrustCarousel />
           <RzPositioningStrip />

@@ -25,12 +25,14 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api": { target, changeOrigin: true },
+        "/go": { target, changeOrigin: true },
       },
     },
     // Same as dev: lets `vite preview` reach the local API without baking VITE_API_BASE_URL.
     preview: {
       proxy: {
         "/api": { target, changeOrigin: true },
+        "/go": { target, changeOrigin: true },
       },
     },
   };

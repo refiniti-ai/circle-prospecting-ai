@@ -1,9 +1,24 @@
 import type { ListingAgentInfo } from "./listingAgents";
 import { formatCityStateZip } from "./placesAddress";
+import { PRODUCTION_SITE_ORIGIN } from "./siteUrl";
+
+/** Local path + public URL for the default listing photo (GHL `listing_photo_url` default). */
+export const DEFAULT_LISTING_PHOTO_PATH = "/Property.webp";
+export const DEFAULT_LISTING_PHOTO_URL = `${PRODUCTION_SITE_ORIGIN}${DEFAULT_LISTING_PHOTO_PATH}`;
 
 export type RadiusId = "subdivision" | "q1" | "h1" | "m1" | "zip";
 
 export const LISTING_RADIUS_ORDER: readonly RadiusId[] = ["subdivision", "q1", "h1", "m1", "zip"] as const;
+
+/** Default ring when opening an MLS / GHL listing (client: 1/4 mile). */
+export const DEFAULT_LISTING_RADIUS_ID: RadiusId = "q1";
+
+/** Zip-code prospecting ring label (no ZIP digits in the name). */
+export const ZIP_RING_LABEL = "Zip Code";
+
+export function radiusRingLabel(id: RadiusId, label: string): string {
+  return id === "zip" ? ZIP_RING_LABEL : label;
+}
 
 /** Miles sent to lead-count / checkout when a listing ring is selected. */
 export function radiusMilesFromId(id: RadiusId): number {
@@ -45,6 +60,12 @@ export type ListingPayload = {
   zip: string;
   /** When set, Buy Leads uses this instead of manual campaign selection. */
   campaignType?: ListingCampaignType;
+  /** Raw GHL "Listing Type" (e.g. Just Listed) — used to lock campaign toggle. */
+  listingType?: string | null;
+  /** GHL Agent Type (Listing / Buyer) — canonical URL role. */
+  agentType?: string | null;
+  /** Public HTTPS URL for the listing photo (GHL `listing_photo_url` or inbound API). */
+  listingPhotoUrl?: string | null;
   createdAt?: string;
   radii: Record<RadiusId, { label: string; count: number }>;
 };
@@ -174,6 +195,14 @@ export function listingFormValuesFromPayload(l: ListingPayload): ListingFormValu
   });
 }
 
+function geoCoordOrFallback(value: number | undefined, fallback: number): number {
+  return value != null && Number.isFinite(value) && value !== 0 ? value : fallback;
+}
+
+export function hasValidMapCoords(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
 export function applyListingFormValues(
   l: ListingPayload,
   v: ListingFormValues,
@@ -192,8 +221,8 @@ export function applyListingFormValues(
     cityStateZip,
     zip: norm.zip.trim() || l.zip,
     county: (geo?.county?.trim() || l.county).replace(/\s+County$/i, "") || l.county,
-    lat: geo?.lat ?? l.lat,
-    lng: geo?.lng ?? l.lng,
+    lat: geoCoordOrFallback(geo?.lat, l.lat),
+    lng: geoCoordOrFallback(geo?.lng, l.lng),
   };
 }
 
@@ -253,11 +282,14 @@ export const SAMPLE_LISTING: ListingPayload = {
     q1: { label: "¼ Mile", count: 134 },
     h1: { label: "½ Mile", count: 739 },
     m1: { label: "1 Mile", count: 4035 },
-    zip: { label: "ZIP (34698)", count: 16766 },
+    zip: { label: ZIP_RING_LABEL, count: 16766 },
   },
 };
 
-/** Palm Harbor example from client workflow mock (TB8502524). */
+/**
+ * Palm Harbor example from client workflow mock (TB8502524).
+ * Also used as the default Buy Leads page placeholder before a listing is loaded.
+ */
 export const PALM_HARBOR_LISTING: ListingPayload = {
   id: "tb8502524",
   internalId: 8502524,
@@ -270,6 +302,8 @@ export const PALM_HARBOR_LISTING: ListingPayload = {
   email: "jeff@jeffborham.com",
   phone: "866-308-7109",
   brokerage: "EXP REALTY LLC",
+  listingPhotoUrl:
+    "https://jmr-img.s3.us-east-2.amazonaws.com/pic/mls/tb8502524/6a2b508f0a926-53c026f5-7873-4d5f-a323-03ef632b0356.jpeg",
   lat: 28.078,
   lng: -82.737,
   zip: "34685",
@@ -280,8 +314,17 @@ export const PALM_HARBOR_LISTING: ListingPayload = {
     q1: { label: "1/4 Mile", count: 370 },
     h1: { label: "1/2 Mile", count: 789 },
     m1: { label: "1 Mile", count: 3359 },
-    zip: { label: "34685 ZipCode", count: 7319 },
+    zip: { label: ZIP_RING_LABEL, count: 7319 },
   },
+};
+
+/**
+ * Placeholder listing so the order page always renders the full mockup layout
+ * (property card, map column, summary, radius row) before Find listing returns data.
+ */
+export const ORDER_LAYOUT_SHELL: ListingPayload = {
+  ...PALM_HARBOR_LISTING,
+  id: "layout-shell",
 };
 
 /** Client example 1 — buyer agent orders (St Petersburg). */
@@ -319,7 +362,7 @@ export const ST_PETE_DUAL_AGENT_LISTING: ListingPayload = {
     q1: { label: "1/4 Mile", count: 459 },
     h1: { label: "1/2 Mile", count: 1569 },
     m1: { label: "1 Mile", count: 6488 },
-    zip: { label: "33704 ZipCode", count: 6957 },
+    zip: { label: ZIP_RING_LABEL, count: 6957 },
   },
 };
 
@@ -358,7 +401,7 @@ export const TARPON_DUAL_AGENT_LISTING: ListingPayload = {
     q1: { label: "1/4 Mile", count: 459 },
     h1: { label: "1/2 Mile", count: 760 },
     m1: { label: "1 Mile", count: 3900 },
-    zip: { label: "34689 ZipCode", count: 11900 },
+    zip: { label: ZIP_RING_LABEL, count: 11900 },
   },
 };
 

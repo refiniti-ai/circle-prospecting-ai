@@ -1,5 +1,7 @@
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { buildMlsLeadsUrl } from "../../lib/mlsUrl";
+import { DEMO_MLS_ID } from "./marketingData";
 
 function IconPerson() {
   return (
@@ -52,7 +54,7 @@ export function RzPostHeroPhoneMarquee() {
 
   function onSampleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    navigate("/buy-leads?mls=TB8502524&campaign=just_listed");
+    navigate(buildMlsLeadsUrl(DEMO_MLS_ID, { campaign: "just_listed" }));
   }
 
   return (
@@ -146,11 +148,11 @@ export function RzPostHeroPhoneMarquee() {
                         </button>
                         <p className="rz-phone-legal">
                           By continuing you agree to our{" "}
-                          <Link to="/terms" className="rz-phone-legal-link">
+                          <Link to="/terms-and-conditions" className="rz-phone-legal-link">
                             Terms
                           </Link>{" "}
                           and{" "}
-                          <Link to="/privacy" className="rz-phone-legal-link">
+                          <Link to="/privacy-policy" className="rz-phone-legal-link">
                             Privacy Policy
                           </Link>
                           .

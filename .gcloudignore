@@ -1,6 +1,7 @@
 # Speed up `gcloud run deploy --source .` uploads (mirrors .dockerignore).
 node_modules/
 dist/
+dist-aws-staging/
 .git/
 secrets/
 .env
@@ -12,3 +13,9 @@ terminals/
 **/.DS_Store
 next-app/node_modules/
 next-app/.next/
+deploy-recovery/
+firebase-live-pull/
+scripts/.recovery-transcript/
+_*.json
+_tmp.json
+server/data/intro-listing-snapshots.json

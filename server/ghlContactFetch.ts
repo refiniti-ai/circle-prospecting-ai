@@ -1,4 +1,16 @@
 import axios from "axios";
+import { getGhlCachedStale, setGhlCached, withGhlCache, coalesceGhlRequest } from "./ghlResponseCache.js";
+import {
+  fetchGhlOpportunity,
+  findGhlOpportunityByContactAndMls,
+  opportunityAgentType,
+  opportunityMatchesMls,
+  opportunityMls,
+  readOpportunityField,
+  searchGhlOpportunitiesByMls,
+  sortOpportunitiesNewestFirst,
+  type GhlOpportunityView,
+} from "./ghlOpportunityFetch.js";
 
 /** Custom fields we surface on the /pay/:contactId page. */
 export const PAY_LINK_FIELD_KEYS = [
@@ -14,6 +26,7 @@ export const PAY_LINK_FIELD_KEYS = [
   "homeowner_name",
   "preferred_channel",
   "listing_link",
+  "listing_photo_url",
   "listing_address",
   "motivation",
   "timeline",
@@ -280,6 +293,7 @@ export async function fetchGhlContact(contactId: string): Promise<GhlContactView
     team_name: ["team"],
     homeowner_name: ["homeowner"],
     listing_link: ["listing_url"],
+    listing_photo_url: ["listing_image_url", "listing_photo", "photo_url", "listing_image"],
     follow_up_date: ["followup_date", "follow_up"],
     zip_code: ["postal_code", "postalcode", "zip"],
     first_name: [], last_name: [], email: [], phone: [], city: [], state: [],
@@ -380,11 +394,19 @@ export type GhlContactSearchHit = {
   phone: string | null;
   mls: string | null;
   listingAddress: string | null;
+  listingPhotoUrl: string | null;
   city: string | null;
   state: string | null;
   zip: string | null;
   realtorName: string | null;
   brokerageName: string | null;
+  listingType: string | null;
+  agentType: string | null;
+  subdivisionHomeOwners: string | null;
+  oneFourthMileHomeOwners: string | null;
+  halfMileHomeOwners: string | null;
+  oneMileHomeOwners: string | null;
+  zipcodeHomeOwners: string | null;
 };
 
 function contactDisplayName(data: Record<string, unknown>): string {
@@ -407,6 +429,7 @@ function mapSearchHit(data: Record<string, unknown>, defs: CustomFieldDefinition
     phone: pickString(data.phone),
     mls: pick("mls"),
     listingAddress: pick("listing_address"),
+    listingPhotoUrl: pick("listing_photo_url"),
     city: pickString(data.city) ?? pick("city"),
     state: pickString(data.state) ?? pick("state"),
     zip:
@@ -415,14 +438,33 @@ function mapSearchHit(data: Record<string, unknown>, defs: CustomFieldDefinition
       pick("zip"),
     realtorName: pick("realtor_name"),
     brokerageName: pick("brokerage_name") ?? pickString(data.companyName),
+    listingType:
+      pick("listing_type") ??
+      raw["listing type"] ??
+      raw.listingtype ??
+      null,
+    agentType:
+      pick("agent_type") ??
+      pick("agent_role") ??
+      raw["agent type"] ??
+      raw.bor_s ??
+      null,
+    subdivisionHomeOwners: pick("subdivision_home_owners"),
+    oneFourthMileHomeOwners: pick("one_fourth_mile_home_owners"),
+    halfMileHomeOwners: pick("half_mile_home_owners"),
+    oneMileHomeOwners: pick("one_mile_home_owners"),
+    zipcodeHomeOwners: pick("zipcode_home_owners"),
   };
 }
 
-/**
- * Search GHL contacts by name, email, or phone (location sub-account).
- * Requires GHL_BEARER_TOKEN and GHL_LOCATION_ID.
- */
-export async function searchGhlContacts(query: string, limit = 12): Promise<GhlContactSearchHit[]> {
+function ghlSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const GHL_CONTACT_SEARCH_CACHE_MS = 5 * 60_000;
+const GHL_CONTACT_SEARCH_STALE_MS = 30 * 60_000;
+
+async function searchGhlContactsUncached(query: string, limit: number): Promise<GhlContactSearchHit[]> {
   const token = process.env.GHL_BEARER_TOKEN?.trim();
   const locationId = ghlLocationId();
   if (!token || !locationId) throw new Error("ghl_not_configured");
@@ -430,8 +472,16 @@ export async function searchGhlContacts(query: string, limit = 12): Promise<GhlC
   const q = query.trim();
   if (q.length < 2) return [];
 
-  const [searchRes, defs] = await Promise.all([
-    axios.post(
+  const defs = await getGhlCustomFieldDefinitions();
+  const retryDelaysMs = [0, 1_000, 3_000, 6_000];
+  let lastStatus = 0;
+  let lastBody = "";
+
+  for (let attempt = 0; attempt < retryDelaysMs.length; attempt++) {
+    const delay = retryDelaysMs[attempt] ?? 0;
+    if (delay > 0) await ghlSleep(delay);
+
+    const searchRes = await axios.post(
       `${ghlApiBase()}/contacts/search`,
       {
         locationId,
@@ -449,27 +499,58 @@ export async function searchGhlContacts(query: string, limit = 12): Promise<GhlC
         timeout: 20_000,
         validateStatus: () => true,
       }
-    ),
-    getGhlCustomFieldDefinitions(),
-  ]);
+    );
 
-  if (searchRes.status < 200 || searchRes.status >= 300) {
-    const body =
+    if (searchRes.status >= 200 && searchRes.status < 300) {
+      const contacts = Array.isArray(searchRes.data?.contacts)
+        ? (searchRes.data.contacts as Record<string, unknown>[])
+        : Array.isArray(searchRes.data?.data)
+          ? (searchRes.data.data as Record<string, unknown>[])
+          : [];
+
+      return contacts
+        .map((c) => mapSearchHit(c, defs))
+        .filter((h) => h.id.length > 0);
+    }
+
+    lastStatus = searchRes.status;
+    lastBody =
       typeof searchRes.data === "string"
         ? searchRes.data.slice(0, 200)
         : JSON.stringify(searchRes.data).slice(0, 200);
-    throw new Error(`ghl_search_${searchRes.status}: ${body}`);
+
+    if (searchRes.status !== 429) break;
   }
 
-  const contacts = Array.isArray(searchRes.data?.contacts)
-    ? (searchRes.data.contacts as Record<string, unknown>[])
-    : Array.isArray(searchRes.data?.data)
-      ? (searchRes.data.data as Record<string, unknown>[])
-      : [];
+  throw new Error(`ghl_search_${lastStatus}: ${lastBody}`);
+}
 
-  return contacts
-    .map((c) => mapSearchHit(c, defs))
-    .filter((h) => h.id.length > 0);
+/**
+ * Search GHL contacts by name, email, or phone (location sub-account).
+ * Requires GHL_BEARER_TOKEN and GHL_LOCATION_ID.
+ */
+export async function searchGhlContacts(query: string, limit = 12): Promise<GhlContactSearchHit[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const cacheKey = `contact-search:v1:${q.toLowerCase()}:${Math.min(Math.max(limit, 1), 25)}`;
+  return coalesceGhlRequest(cacheKey, async () => {
+    const { fresh, stale } = getGhlCachedStale<GhlContactSearchHit[]>(cacheKey, GHL_CONTACT_SEARCH_STALE_MS);
+    if (fresh) return fresh;
+
+    try {
+      const results = await searchGhlContactsUncached(q, limit);
+      setGhlCached(cacheKey, results, GHL_CONTACT_SEARCH_CACHE_MS);
+      return results;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (stale && /429|too many/i.test(msg)) {
+        console.warn("[ghl] contact search rate limited — serving stale cache", q);
+        return stale;
+      }
+      throw e;
+    }
+  });
 }
 
 function normalizeMlsValue(raw: string | null | undefined): string {
@@ -577,13 +658,64 @@ async function scanGhlContactsForMls(
  * Find GHL contacts by MLS custom field. Text search does not index MLS — we filter
  * on customFields.mls and fall back to scanning location contacts.
  */
-export async function searchGhlContactsByMls(mls: string, limit = 12): Promise<GhlContactSearchHit[]> {
+const GHL_READ_CACHE_MS = 90_000;
+
+/** Opportunity rows are the source of truth for MLS-specific radius counts and listing fields. */
+async function contactHitsFromOpportunitiesForMls(
+  mls: string,
+  limit: number
+): Promise<GhlContactSearchHit[]> {
+  const opps = await searchGhlOpportunitiesByMls(mls, limit);
+  const fromOpps: GhlContactSearchHit[] = [];
+  for (const opp of opps) {
+    const cid = opp.contactId?.trim();
+    if (!cid) continue;
+    try {
+      const base = await prefillFromContactId(cid);
+      const full = await fetchGhlOpportunity(opp.id);
+      fromOpps.push(overlayOpportunityOnPrefill(base, full, mls));
+    } catch {
+      continue;
+    }
+    if (fromOpps.length >= limit) break;
+  }
+  return fromOpps;
+}
+
+async function overlayFromGlobalMlsOpportunity(
+  hit: GhlListingContactHit,
+  mls: string
+): Promise<GhlContactSearchHit | GhlContactPrefillHit | null> {
+  const mlsNorm = normalizeMlsValue(mls);
+  try {
+    const global = await searchGhlOpportunitiesByMls(mls, 8);
+    const match = sortOpportunitiesNewestFirst(
+      global.filter((o) => opportunityMatchesMls(o, mlsNorm))
+    )[0];
+    if (!match?.id) return null;
+    const full = await fetchGhlOpportunity(match.id);
+    if (!opportunityMatchesMls(full, mlsNorm)) return null;
+    return overlayOpportunityOnPrefill(hit, full, mls);
+  } catch {
+    return null;
+  }
+}
+
+async function searchGhlContactsByMlsUncached(mls: string, limit = 12): Promise<GhlContactSearchHit[]> {
   const token = process.env.GHL_BEARER_TOKEN?.trim();
   const locationId = ghlLocationId();
   if (!token || !locationId) throw new Error("ghl_not_configured");
 
   const mlsNorm = normalizeMlsValue(mls);
   if (mlsNorm.length < 3) return [];
+
+  /** Opportunity-first — contact.mls can point at the wrong person when multiple agents share a listing. */
+  try {
+    const fromOpps = await contactHitsFromOpportunitiesForMls(mls, limit);
+    if (fromOpps.length > 0) return fromOpps;
+  } catch {
+    /* fall through to contact-field search */
+  }
 
   const defs = await getGhlCustomFieldDefinitions();
   const mlsFieldId = defs.keyToId.mls || defs.keyToId.MLS;
@@ -609,23 +741,172 @@ export async function searchGhlContactsByMls(mls: string, limit = 12): Promise<G
   for (const body of filterBodies) {
     try {
       const hits = await ghlSearchWithBody(body, defs, limit);
-      const matched = hits.filter((h) => {
-        const hitMls = normalizeMlsValue(h.mls);
-        return hitMls === mlsNorm || hitMls.includes(mlsNorm);
-      });
-      if (matched.length > 0) return matched;
+      const matched = hits.filter((h) => normalizeMlsValue(h.mls) === mlsNorm);
+      if (matched.length > 0) return enrichContactHitsFromOpportunity(matched, mls);
     } catch {
       /* try next filter shape */
     }
   }
 
-  return scanGhlContactsForMls(locationId, mlsNorm, defs, limit);
+  const scanned = await scanGhlContactsForMls(locationId, mlsNorm, defs, limit);
+  if (scanned.length > 0) return enrichContactHitsFromOpportunity(scanned, mls);
+
+  try {
+    return await contactHitsFromOpportunitiesForMls(mls, limit);
+  } catch {
+    return [];
+  }
 }
 
-/** Buy Leads prefill from a GHL contact id. */
-export async function fetchGhlContactPrefill(contactId: string): Promise<GhlContactSearchHit> {
+export async function searchGhlContactsByMls(mls: string, limit = 12): Promise<GhlContactSearchHit[]> {
+  const mlsNorm = normalizeMlsValue(mls);
+  if (mlsNorm.length < 3) return [];
+  const key = `mls-search:v6:${mlsNorm}:${limit}`;
+  return withGhlCache(key, GHL_READ_CACHE_MS, () => searchGhlContactsByMlsUncached(mls, limit));
+}
+
+export type GhlContactPrefillHit = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  mls: string | null;
+  listingAddress: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  realtorName: string | null;
+  brokerageName: string | null;
+  agentType: string | null;
+  listingType: string | null;
+  listingPhotoUrl: string | null;
+  subdivisionHomeOwners: string | null;
+  oneFourthMileHomeOwners: string | null;
+  halfMileHomeOwners: string | null;
+  oneMileHomeOwners: string | null;
+  zipcodeHomeOwners: string | null;
+};
+
+function parseListingAddressTail(line: string | null | undefined): {
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+} {
+  const parts = (line || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 3) return { city: null, state: null, zip: null };
+  const zipPart = parts[parts.length - 1] ?? "";
+  const statePart = parts[parts.length - 2] ?? "";
+  const cityPart = parts[parts.length - 3] ?? "";
+  const zip = /^\d{5}/.test(zipPart) ? zipPart.slice(0, 5) : null;
+  const state = /^[A-Z]{2}$/i.test(statePart) ? statePart.toUpperCase() : null;
+  return { city: cityPart || null, state, zip };
+}
+
+type GhlListingContactHit = GhlContactPrefillHit | GhlContactSearchHit;
+
+function overlayOpportunityOnPrefill(
+  hit: GhlListingContactHit,
+  opp: GhlOpportunityView,
+  requestedMls?: string
+): GhlContactPrefillHit {
+  const pick = (key: string) => readOpportunityField(opp, key);
+  const listingType =
+    pick("listing_type") ?? pick("listing type") ?? pick("Listing Type") ?? hit.listingType;
+  const agentType = opportunityAgentType(opp) ?? hit.agentType;
+  const listingAddress = pick("listing_address") ?? hit.listingAddress;
+  const fromAddr = parseListingAddressTail(listingAddress);
+  const want = requestedMls?.trim();
+  return {
+    ...hit,
+    /** URL/search MLS wins — opp custom field may have been overwritten by a later lead. */
+    mls: (want && want.length >= 3 ? want : null) || opportunityMls(opp) || hit.mls,
+    listingAddress,
+    listingPhotoUrl:
+      pick("listing_photo_url") ?? pick("listing_image_url") ?? hit.listingPhotoUrl,
+    city: pick("city") ?? fromAddr.city ?? hit.city,
+    state: pick("state") ?? fromAddr.state ?? hit.state,
+    zip: pick("zip_code") ?? pick("zip") ?? fromAddr.zip ?? hit.zip,
+    listingType,
+    agentType,
+    /** Radius counts always from opportunity — contact fields are often stale on multi-listing agents. */
+    subdivisionHomeOwners: pick("subdivision_home_owners"),
+    oneFourthMileHomeOwners:
+      pick("one_fourth_mile_home_owners") ?? pick("14_mile_home_owners"),
+    halfMileHomeOwners: pick("half_mile_home_owners") ?? pick("12_mile_home_owners"),
+    oneMileHomeOwners: pick("one_mile_home_owners") ?? pick("1_mile_home_owners"),
+    zipcodeHomeOwners: pick("zipcode_home_owners"),
+  };
+}
+
+/** Load matching opportunity and overlay listing + radius fields onto a contact hit. */
+async function enrichContactHitFromOpportunity(
+  hit: GhlContactSearchHit,
+  mls: string
+): Promise<GhlContactSearchHit> {
+  const mlsNorm = normalizeMlsValue(mls);
+  const { opportunityId } = await findGhlOpportunityByContactAndMls(hit.id, mls);
+  if (opportunityId) {
+    const opp = await fetchGhlOpportunity(opportunityId);
+    return overlayOpportunityOnPrefill(hit, opp, mls);
+  }
+  try {
+    const global = await searchGhlOpportunitiesByMls(mls, 8);
+    for (const row of global) {
+      if ((row.contactId || "").trim() !== hit.id.trim()) continue;
+      try {
+        const full = await fetchGhlOpportunity(row.id);
+        if (opportunityMatchesMls(full, mlsNorm)) {
+          return overlayOpportunityOnPrefill(hit, full, mls);
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    /* no opportunity on this contact */
+  }
+  const fromGlobal = await overlayFromGlobalMlsOpportunity(hit, mls);
+  return fromGlobal ?? hit;
+}
+
+async function enrichContactHitsFromOpportunity(
+  hits: GhlContactSearchHit[],
+  mls: string
+): Promise<GhlContactSearchHit[]> {
+  const out: GhlContactSearchHit[] = [];
+  for (const hit of hits) {
+    if (!hit.id) continue;
+    out.push(await enrichContactHitFromOpportunity(hit, mls));
+  }
+  return out;
+}
+
+async function prefillFromContactId(contactId: string): Promise<GhlContactPrefillHit> {
   const c = await fetchGhlContact(contactId);
   const name = [c.firstName, c.lastName].filter(Boolean).join(" ").trim() || c.fields.realtor_name || "Contact";
+  const listingType =
+    c.raw.listing_type ??
+    c.raw["listing type"] ??
+    c.raw.listingtype ??
+    null;
+
+  const agentType =
+    c.raw.agent_type ??
+    c.raw.agent_role ??
+    c.raw["agent type"] ??
+    c.raw.bor_s ??
+    null;
+
+  const photo =
+    c.fields.listing_photo_url ??
+    c.raw.listing_photo_url ??
+    c.raw.listing_image_url ??
+    c.raw.listing_photo ??
+    null;
+
   return {
     id: c.id,
     name,
@@ -633,12 +914,86 @@ export async function fetchGhlContactPrefill(contactId: string): Promise<GhlCont
     phone: c.phone,
     mls: c.fields.mls,
     listingAddress: c.fields.listing_address,
+    listingPhotoUrl: photo,
     city: c.fields.city,
     state: c.fields.state,
     zip: c.fields.zip_code,
     realtorName: c.fields.realtor_name,
     brokerageName: c.fields.brokerage_name,
+    listingType,
+    agentType,
+    subdivisionHomeOwners: c.fields.subdivision_home_owners,
+    oneFourthMileHomeOwners: c.fields.one_fourth_mile_home_owners,
+    halfMileHomeOwners: c.fields.half_mile_home_owners,
+    oneMileHomeOwners: c.fields.one_mile_home_owners,
+    zipcodeHomeOwners: c.fields.zipcode_home_owners,
   };
+}
+
+/**
+ * Buy Leads prefill from a GHL contact id.
+ * When `requestedMls` differs from contact.mls (multi-listing agent), load listing from that opportunity.
+ */
+async function fetchGhlContactPrefillUncached(
+  contactId: string,
+  requestedMls?: string
+): Promise<GhlContactPrefillHit> {
+  const base = await prefillFromContactId(contactId);
+  const want = requestedMls?.trim();
+  if (!want || want.length < 3) {
+    return base;
+  }
+
+  const { opportunityId } = await findGhlOpportunityByContactAndMls(contactId, want);
+  if (opportunityId) {
+    const opp = await fetchGhlOpportunity(opportunityId);
+    return overlayOpportunityOnPrefill(base, opp, want);
+  }
+
+  try {
+    const global = await searchGhlOpportunitiesByMls(want, 8);
+    const match = sortOpportunitiesNewestFirst(
+      global.filter(
+        (o) =>
+          (o.contactId || "").trim() === contactId.trim() &&
+          opportunityMatchesMls(o, normalizeMlsValue(want))
+      )
+    )[0];
+    if (match?.id) {
+      const opp = await fetchGhlOpportunity(match.id);
+      return overlayOpportunityOnPrefill(base, opp, want);
+    }
+    for (const hit of global) {
+      if (!hit.id) continue;
+      try {
+        const full = await fetchGhlOpportunity(hit.id);
+        if (
+          (full.contactId || "").trim() === contactId.trim() &&
+          opportunityMatchesMls(full, normalizeMlsValue(want))
+        ) {
+          return overlayOpportunityOnPrefill(base, full, want);
+        }
+      } catch {
+        /* try next */
+      }
+    }
+    const fromGlobal = await overlayFromGlobalMlsOpportunity(base, want);
+    if (fromGlobal) return fromGlobal;
+  } catch {
+    /* fall through */
+  }
+
+  return { ...base, mls: want };
+}
+
+export async function fetchGhlContactPrefill(
+  contactId: string,
+  requestedMls?: string
+): Promise<GhlContactPrefillHit> {
+  const cid = contactId.trim();
+  const mlsKey = (requestedMls || "").trim().toUpperCase();
+  const key = `prefill:v6:${cid}:${mlsKey}`;
+  return withGhlCache(key, GHL_READ_CACHE_MS, () => fetchGhlContactPrefillUncached(cid, requestedMls));
 }
 
 /** Parse a GHL numeric custom field like "789" or "1,234". Returns null when unusable. */

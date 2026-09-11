@@ -45,6 +45,11 @@ export type LeadCheckoutContext = {
   agentRole?: "buyer" | "seller";
   /** Beta promo code — server validates and applies $0.50/home when valid. */
   promoCode?: string;
+  mls?: string;
+  listingAddress?: string;
+  agentName?: string;
+  brokerage?: string;
+  radiusLabel?: string;
 };
 
 export async function startLeadCheckout(
@@ -72,6 +77,11 @@ export async function startLeadCheckout(
       campaignType: context?.campaignType,
       agentRole: context?.agentRole,
       promoCode: context?.promoCode,
+      mls: context?.mls,
+      listingAddress: context?.listingAddress,
+      agentName: context?.agentName,
+      brokerage: context?.brokerage,
+      radiusLabel: context?.radiusLabel,
     }),
   });
   assertJsonResponse(r, "Checkout");
@@ -584,12 +594,59 @@ export async function fetchAdminSummary(adminKey: string) {
   return (await r.json()) as { inventory: { total: number; available: number; sold: number; updatedAt: string } };
 }
 
+export type AdminCheckoutFunnelRow = {
+  sessionId: string;
+  status: "started" | "paid" | "canceled" | "expired";
+  source: string;
+  checkoutType: string;
+  serviceLine?: string | null;
+  leadTier?: string | null;
+  requestedLeads?: number | null;
+  amountCents?: number | null;
+  customerEmail?: string | null;
+  mls?: string | null;
+  listingAddress?: string | null;
+  pagePath?: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+};
+
+export type AdminCheckoutFunnelSummary = {
+  continued: number;
+  paid: number;
+  stopped: number;
+  inProgress: number;
+  conversionRate: number;
+  updatedAt: string;
+  recentStopped: AdminCheckoutFunnelRow[];
+  unpaid?: AdminCheckoutFunnelRow[];
+};
+
+export async function fetchAdminCheckoutFunnel(adminKey: string) {
+  const r = await fetch(`${apiBase()}/api/admin/checkout-funnel`, {
+    headers: { Authorization: `Bearer ${adminKey}`, Accept: "application/json" },
+  });
+  if (!r.ok) throw new Error("checkout funnel");
+  return (await r.json()) as { ok: true; funnel: AdminCheckoutFunnelSummary };
+}
+
+/** Fire-and-forget: user returned from Stripe cancel_url. */
+export async function reportCheckoutCanceled(sessionId: string) {
+  await fetch(`${apiBase()}/api/checkout/funnel/canceled`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
 export type AdminPurchaseRow = {
   sessionId: string;
   orderNumber: string;
   notifiedAt: string;
   checkoutType: string;
   customerEmail: string | null;
+  customerPhone?: string | null;
   amountTotalCents: number | null;
   currency: string | null;
   lineItems: string[];
@@ -597,6 +654,12 @@ export type AdminPurchaseRow = {
   leadTier?: string | null;
   requestedLeads?: number | null;
   targetingSummary?: string | null;
+  mls?: string | null;
+  listingAddress?: string | null;
+  agentName?: string | null;
+  brokerage?: string | null;
+  campaignType?: string | null;
+  radiusLabel?: string | null;
   leadWorkStatus?: "pending" | "completed" | null;
 };
 

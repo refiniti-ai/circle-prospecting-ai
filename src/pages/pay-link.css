@@ -366,7 +366,7 @@
 
 .pay-link-shell .buy-pricing-stack {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--buy-pricing-cols, 2), minmax(11.5rem, 1fr));
   gap: 0.65rem;
   align-items: stretch;
 }
@@ -423,6 +423,18 @@
   table-layout: fixed;
 }
 
+.pay-link-shell .buy-price-table col.buy-price-col-select {
+  width: 2.35rem;
+}
+
+.pay-link-shell .buy-price-table col.buy-price-col-package {
+  width: 36%;
+}
+
+.pay-link-shell .buy-price-table col.buy-price-col-homes {
+  width: 24%;
+}
+
 .pay-link-shell .buy-price-banner {
   text-align: left;
   padding: 0.65rem 0.9rem;
@@ -459,12 +471,18 @@
   padding: 0.4rem 0.45rem;
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);
   color: #0f172a;
-  overflow-wrap: anywhere;
+}
+
+.pay-link-shell .buy-price-col-package,
+.pay-link-shell .buy-price-col-homes,
+.pay-link-shell .buy-price-table td:nth-child(4) {
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 
 .pay-link-shell .buy-price-table td:nth-child(4) {
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .pay-link-shell .buy-price-table tbody tr:last-child td {
@@ -555,7 +573,7 @@
 
 @media (max-width: 480px) {
   .pay-link-shell .buy-pricing-stack {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
     gap: 0.85rem;
   }
   .pay-link-shell .buy-price-table {

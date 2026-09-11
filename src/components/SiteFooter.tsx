@@ -18,9 +18,8 @@ export function SiteFooter() {
               <p className="rz-footer-rez-col-title">Product</p>
               <nav className="rz-footer-rez-links" aria-label="Product links">
                 <Link to="/leads">Product</Link>
-                <Link to="/how-it-works">Features</Link>
+                <Link to="/how-it-works">How it Works</Link>
                 <Link to="/campaign-pricing">Pricing</Link>
-                <Link to="/coverage">Coverage</Link>
                 <Link to="/buy-leads">Start prospecting</Link>
               </nav>
             </div>
@@ -29,14 +28,13 @@ export function SiteFooter() {
               <nav className="rz-footer-rez-links" aria-label="Company links">
                 <Link to="/contact">Contact</Link>
                 <Link to="/dashboard">Client dashboard</Link>
-                <Link to="/coverage">Areas</Link>
               </nav>
             </div>
             <div>
               <p className="rz-footer-rez-col-title">Legal</p>
               <nav className="rz-footer-rez-links" aria-label="Legal links">
-                <Link to="/privacy">Privacy</Link>
-                <Link to="/terms">Terms</Link>
+                <Link to="/privacy-policy">Privacy Policy</Link>
+                <Link to="/terms-and-conditions">Terms &amp; Conditions</Link>
               </nav>
             </div>
           </div>
@@ -45,10 +43,10 @@ export function SiteFooter() {
               © {y} Circle Prospecting AI · All rights reserved
             </p>
             <nav className="rz-footer-rez-meta-links" aria-label="Footer legal links">
-              <Link to="/privacy">Privacy Policy</Link>
-              <Link to="/terms">Terms of Service</Link>
+              <Link to="/privacy-policy">Privacy Policy</Link>
+              <Link to="/terms-and-conditions">Terms &amp; Conditions</Link>
               <a href="/#faq">FAQ</a>
-              <Link to="/coverage">Coverage</Link>
+              <Link to="/how-it-works">How it Works</Link>
             </nav>
           </div>
         </div>

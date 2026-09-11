@@ -4,7 +4,8 @@ import { allocateLeads, getSummary } from "./leadStore.js";
 import { opsLog } from "./opsLog.js";
 
 export function fulfillLeadPackFromSession(session: Stripe.Checkout.Session) {
-  if (session.metadata?.checkoutType !== "lead_pack") return;
+  const ct = session.metadata?.checkoutType;
+  if (ct !== "lead_pack" && ct !== "intro_campaign") return;
   const packSize = Number(session.metadata?.packSize || session.metadata?.requestedLeads || 0);
   const email = canonicalCheckoutEmail(session);
   if (!email || !packSize) {

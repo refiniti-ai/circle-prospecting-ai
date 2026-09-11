@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import Stripe from "stripe";
 import { applyPaidCheckoutSessionSideEffects } from "./checkoutSessionSideEffects.js";
+import { markCheckoutExpired } from "./checkoutFunnelStore.js";
 import { opsLog } from "./opsLog.js";
 
 export function createStripeWebhookHandler() {
@@ -44,6 +45,14 @@ export function createStripeWebhookHandler() {
         console.error("checkout.session.completed processing failed", err);
         res.status(500).json({ error: "webhook processing failed" });
         return;
+      }
+    } else if (event.type === "checkout.session.expired") {
+      try {
+        const minimal = event.data.object as Stripe.Checkout.Session;
+        markCheckoutExpired(minimal.id);
+        opsLog("stripe_webhook_checkout_expired", { sessionId: minimal.id, eventId: event.id });
+      } catch (err) {
+        console.error("checkout.session.expired processing failed", err);
       }
     }
     res.json({ received: true });

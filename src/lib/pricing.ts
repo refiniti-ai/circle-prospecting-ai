@@ -2,13 +2,12 @@ export type PlanId = "ai" | "live" | "pro";
 
 export type CampaignTier = { min: number; max: number; rates: Record<PlanId, number> };
 
-/** Bundled fallback when API is offline — align with operator tier grid (`server/data/pricing-grid.csv`). */
+/** Bundled fallback when API is offline — align with `LEAD_PRICE_MATRIX` / `server/data/pricing-grid.csv`. */
 export const DEFAULT_CAMPAIGN_TIERS: CampaignTier[] = [
-  { min: 0, max: 250, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
-  { min: 251, max: 500, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
-  { min: 501, max: 1000, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
-  { min: 1001, max: 2500, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
-  { min: 2501, max: Number.POSITIVE_INFINITY, rates: { ai: 0.5, live: 0.5, pro: 0.5 } },
+  { min: 1, max: 249, rates: { ai: 0.25, live: 0.75, pro: 0.8 } },
+  { min: 250, max: 499, rates: { ai: 0.22, live: 0.7, pro: 0.75 } },
+  { min: 500, max: 999, rates: { ai: 0.21, live: 0.66, pro: 0.7 } },
+  { min: 1000, max: Number.POSITIVE_INFINITY, rates: { ai: 0.2, live: 0.6, pro: 0.65 } },
 ];
 
 export function getUnitPriceWithTiers(tiers: CampaignTier[], homeCount: number, plan: PlanId): number {

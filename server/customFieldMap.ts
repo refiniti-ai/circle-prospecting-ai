@@ -2,8 +2,8 @@ import type { LeadServiceLine, LeadTierId } from "../src/lib/leadPricing.js";
 import type { RadiusId } from "./orderStore.js";
 
 const RADIUS_IDS = new Set<RadiusId>(["subdivision", "q1", "h1", "m1", "zip"]);
-const SERVICE_LINES = new Set<LeadServiceLine>(["ai_outreach", "live_callers", "hybrid", "data_only"]);
-const TIERS = new Set<LeadTierId>(["dabble", "starter", "growth", "scale"]);
+const SERVICE_LINES = new Set<LeadServiceLine>(["ai_outreach", "live_callers", "hybrid", "data_only", "mailers"]);
+const TIERS = new Set<LeadTierId>(["dabble", "starter", "growth", "scale", "dominate"]);
 
 const KNOWN_KEYS = new Set([
   "order",
@@ -53,6 +53,10 @@ const KNOWN_KEYS = new Set([
   "zip",
   "listprice",
   "list_price",
+  "listing_photo_url",
+  "listing_image_url",
+  "listing_photo",
+  "photo_url",
 ]);
 
 function normKey(k: string): string {
@@ -88,6 +92,7 @@ function parseServiceLine(raw: string | undefined): LeadServiceLine | undefined 
   if (v === "live" || v === "callers" || v === "livecaller") return "live_callers";
   if (v === "hybrid" || v === "ai_live") return "hybrid";
   if (v === "data" || v === "dataonly") return "data_only";
+  if (v === "mailer" || v === "direct_mail" || v === "directmail" || v === "postcard") return "mailers";
   return undefined;
 }
 
@@ -159,7 +164,9 @@ export function parseDocumentQuery(query: Record<string, unknown>): ParsedDocume
     homes: parseHomes(firstString(flat, ["homes", "homecount", "home_count", "requestedleads", "requested_leads", "packsize", "pack_size"])),
     serviceLine: parseServiceLine(firstString(flat, ["serviceline", "service_line", "service", "product"])),
     leadTier: parseTier(firstString(flat, ["leadtier", "lead_tier", "tier", "plan"])),
-    campaignType: parseCampaign(firstString(flat, ["campaign", "campaigntype", "campaign_type"])),
+    campaignType: parseCampaign(
+      firstString(flat, ["campaign", "campaigntype", "campaign_type", "listingtype", "listing_type", "listing type"])
+    ),
     address: firstString(flat, ["address", "listingaddress", "listing_address"]),
     agentName: firstString(flat, ["agentname", "agent_name"]),
     email: firstString(flat, ["email", "agentemail", "agent_email"]),

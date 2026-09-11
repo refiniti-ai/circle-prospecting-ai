@@ -14,6 +14,7 @@ type Props = {
   onChange: (value: string) => void;
   onPlaceSelect: (place: ParsedPlaceAddress) => void;
   onEnter?: () => void;
+  onFocus?: () => void;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -24,6 +25,7 @@ function AddressAutocompletePlain({
   value,
   onChange,
   onEnter,
+  onFocus,
   disabled,
   placeholder,
   className,
@@ -35,6 +37,7 @@ function AddressAutocompletePlain({
       className={className}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onFocus={onFocus}
       onKeyDown={(e) => {
         if (e.key === "Enter") onEnter?.();
       }}
@@ -128,9 +131,18 @@ function AddressAutocompleteWithMaps({
 }
 
 export function AddressAutocompleteInput(props: Props) {
+  const [mapsEnabled, setMapsEnabled] = useState(false);
   const key = googleMapsApiKey();
   if (!key || isGoogleMapsAuthFailed()) {
     return <AddressAutocompletePlain {...props} />;
+  }
+  if (!mapsEnabled) {
+    return (
+      <AddressAutocompletePlain
+        {...props}
+        onFocus={() => setMapsEnabled(true)}
+      />
+    );
   }
   return <AddressAutocompleteWithMaps {...props} apiKey={key} />;
 }

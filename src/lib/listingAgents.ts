@@ -1,4 +1,9 @@
 import type { ListingCampaignType, ListingPayload } from "./listingData";
+import { buildMlsLeadsUrl } from "./mlsUrl";
+import {
+  agentRoleFromCampaignPath,
+  parseMlsCampaignPathSegment,
+} from "./mlsCampaignPath";
 
 export type ListingAgentRole = "buyer" | "seller";
 
@@ -88,17 +93,27 @@ export function buildBuyLeadsUrl(
   mls: string,
   opts?: { agent?: ListingAgentRole; campaign?: ListingCampaignType; radius?: string }
 ): string {
-  const qs = new URLSearchParams();
-  qs.set("mls", mls);
-  if (opts?.agent) qs.set("agent", opts.agent);
-  if (opts?.campaign) qs.set("campaign", opts.campaign);
-  if (opts?.radius) qs.set("radius", opts.radius);
-  return `/buy-leads?${qs.toString()}`;
+  return buildMlsLeadsUrl(mls, opts);
+}
+
+/** buyer | seller | b | s + GHL labels (Listing, Buyer's Agent, etc.). */
+export function parseAgentRoleInput(raw: string | null | undefined): ListingAgentRole | null {
+  if (!raw?.trim()) return null;
+  const t = raw.trim().toLowerCase();
+  if (t === "buyer" || t === "b" || t.includes("buyer")) return "buyer";
+  if (t === "seller" || t === "s" || t.includes("seller")) return "seller";
+  if (t === "listing" || t.includes("listing") || t === "list") return "seller";
+  return null;
 }
 
 export function agentRoleFromParam(raw: string | null): ListingAgentRole | null {
-  if (raw === "buyer" || raw === "seller") return raw;
-  return null;
+  return parseAgentRoleInput(raw);
+}
+
+export function agentRoleFromPathSegment(raw: string | undefined): ListingAgentRole | null {
+  const seg = parseMlsCampaignPathSegment(raw);
+  if (seg) return agentRoleFromCampaignPath(seg);
+  return parseAgentRoleInput(raw);
 }
 
 export function listingHasDualAgents(l: ListingPayload | null): boolean {

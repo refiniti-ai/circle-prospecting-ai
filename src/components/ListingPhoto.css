@@ -1,0 +1,40 @@
+.listing-photo {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #e8eef4;
+}
+
+.listing-photo--hero {
+  aspect-ratio: 4 / 3;
+  min-height: 180px;
+}
+
+.listing-photo--thumb {
+  width: 4.5rem;
+  height: 3.25rem;
+  min-height: 0;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.listing-photo.is-fallback {
+  object-fit: contain;
+  object-position: center;
+}
+
+.listing-photo--pending {
+  background: linear-gradient(110deg, #e8eef4 8%, #f4f7fa 18%, #e8eef4 33%);
+  background-size: 200% 100%;
+  animation: listing-photo-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes listing-photo-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}

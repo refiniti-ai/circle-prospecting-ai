@@ -10,6 +10,7 @@ import "./index.css";
 import "./styles/premium-pages.css";
 import "./pages/home.css";
 import "./styles/rezora-shell.css";
+import "./pages/intro-campaign.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

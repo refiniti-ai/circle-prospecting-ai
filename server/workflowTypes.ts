@@ -21,6 +21,7 @@ const listingNested = z.object({
   listPrice: z.string().optional(),
   lat: z.coerce.number().optional(),
   lng: z.coerce.number().optional(),
+  listingPhotoUrl: z.string().url().optional(),
   createdAt: z.string().optional(),
 });
 
@@ -58,6 +59,7 @@ export const inboundNewListingSchema = z
     lat: z.coerce.number().optional(),
     lng: z.coerce.number().optional(),
     zip: z.string().optional(),
+    listingPhotoUrl: z.string().url().optional(),
     createdAt: z.string().optional(),
     subdivision: z.coerce.number().int().nonnegative().optional(),
     q1: z.coerce.number().int().nonnegative().optional(),

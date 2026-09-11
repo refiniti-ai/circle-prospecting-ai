@@ -3,6 +3,7 @@ import { MarketingPageShell } from "../components/marketing/MarketingPageShell";
 import { submitContactForm } from "../lib/leadsApi";
 import { contactInboxEmail } from "../lib/siteConfig";
 import { notifyError, notifySuccess } from "../lib/notify";
+import { trackFirstPromoterReferral } from "../lib/firstPromoter";
 
 /** Left-column contact details (email, phone, social). */
 const CONTACT_DISPLAY = {
@@ -107,6 +108,7 @@ export function ContactPage() {
         message: message.trim(),
         company: company.trim() || undefined,
       });
+      trackFirstPromoterReferral(email.trim());
       notifySuccess("Thanks — we received your message and will get back to you soon.");
       setName("");
       setEmail("");

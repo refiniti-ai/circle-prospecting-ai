@@ -1,0 +1,76 @@
+<!--
+  Circle Prospecting AI — Order confirmation (GHL Email action)
+
+  OPTION A (recommended): Message body = only
+    {{inboundWebhookRequest.html}}
+  The API sends a complete HTML email with logo + detail table.
+
+  OPTION B: Paste docs/email-templates/order-confirmation-ghl-paste.html in GHL HTML mode.
+  Use {{inboundWebhookRequest.logoUrl}} for the banner (560px wide). Title uses <span>
+  so GHL's editor does not shrink "Order confirmation" to 16px.
+-->
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f9;font-family:Segoe UI,system-ui,sans-serif;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);">
+        <tr>
+          <td style="padding:0;line-height:0;background:#0a1628;text-align:center;">
+            <img src="{{inboundWebhookRequest.logoUrl}}" width="560" alt="Circle Prospecting AI" style="display:block;width:100%;max-width:560px;height:auto;border:0;margin:0 auto;" />
+          </td>
+        </tr>
+        <tr>
+          <td style="background:linear-gradient(125deg,#059669 0%,#0d9488 38%,#0891b2 72%,#0284c7 100%);padding:18px 24px;text-align:center;">
+            <span style="font-size:32px;font-weight:700;color:#ecfdf5;line-height:1.2;letter-spacing:-0.01em;">Order confirmation</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 24px;">
+            <p style="margin:0 0 16px;font-size:16px;line-height:1.55;color:#334155;">Thank you for your purchase. Your payment was received successfully.</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:20px;">
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;width:42%;">First name</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.firstName}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">Last name</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.lastName}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">Listing address</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.listingAddress}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">Radius</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.radius}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">Plan</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.plan}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">Homes in order</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.homesInOrder}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">MLS</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.mls}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;">Purchased amount</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0369a1;font-weight:700;">{{inboundWebhookRequest.purchasedAmount}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;font-size:13px;color:#64748b;font-weight:600;">Order number</td>
+                <td style="padding:12px 16px;font-size:15px;color:#0f172a;font-weight:500;">{{inboundWebhookRequest.orderNumber}}</td>
+              </tr>
+            </table>
+            <p style="margin:16px 0 0;font-size:14px;color:#64748b;">
+              Questions? Email <a href="mailto:info@circleprospecting.ai" style="color:#0284c7;">info@circleprospecting.ai</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

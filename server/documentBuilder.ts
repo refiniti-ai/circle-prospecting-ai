@@ -105,7 +105,7 @@ function listingFromFields(fields: ParsedDocumentFields, base: ListingPayload | 
       q1: { label: "¼ Mile", count: fields.homes ?? 0 },
       h1: { label: "½ Mile", count: fields.homes ?? 0 },
       m1: { label: "1 Mile", count: fields.homes ?? 0 },
-      zip: { label: `ZIP (${zip})`, count: fields.homes ?? 0 },
+      zip: { label: "Zip Code", count: fields.homes ?? 0 },
     },
   };
 }
@@ -133,14 +133,18 @@ export async function buildQuoteDocument(query: Record<string, unknown>): Promis
   const tierOk = leadCountFitsTier(homes, leadTier);
   const base = publicSiteBase();
   const orderRef = listing?.id || orderId || fields.mls || "draft";
-  const qs = new URLSearchParams();
-  if (listing?.mls) qs.set("mls", listing.mls);
-  else if (orderRef) qs.set("order", orderRef);
-  if (campaignType) qs.set("campaign", campaignType);
-  qs.set("radius", radiusId);
-  qs.set("homes", String(homes));
-  qs.set("serviceLine", serviceLine);
-  qs.set("leadTier", leadTier);
+  const mlsForUrl = listing?.mls?.trim() || (fields.mls?.trim() && !fields.mls.includes(" ") ? fields.mls.trim() : "");
+  const buyLeadsPath = mlsForUrl
+    ? `/mls/${encodeURIComponent(mlsForUrl)}`
+    : `/buy-leads?order=${encodeURIComponent(orderRef)}`;
+  const buyLeadsQs = new URLSearchParams();
+  if (campaignType) buyLeadsQs.set("campaign", campaignType);
+  buyLeadsQs.set("radius", radiusId);
+  buyLeadsQs.set("homes", String(homes));
+  buyLeadsQs.set("serviceLine", serviceLine);
+  buyLeadsQs.set("leadTier", leadTier);
+  const buyLeadsTail = buyLeadsQs.toString();
+  const buyLeadsUrl = `${base}${buyLeadsPath}${buyLeadsTail ? `?${buyLeadsTail}` : ""}`;
 
   const summaryLines: DocumentLine[] = [
     { label: "Campaign", value: campaignLabel(campaignType) },
@@ -186,8 +190,8 @@ export async function buildQuoteDocument(query: Record<string, unknown>): Promis
     tierBandOk: tierOk,
     summaryLines,
     customFields,
-    checkoutUrl: listing ? `${base}/buy-leads?${qs.toString()}` : `${base}/buy-leads?${qs.toString()}`,
-    buyLeadsUrl: `${base}/buy-leads?${qs.toString()}`,
+    checkoutUrl: buyLeadsUrl,
+    buyLeadsUrl,
   };
 }
 

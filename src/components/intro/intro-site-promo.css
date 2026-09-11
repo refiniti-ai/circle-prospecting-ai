@@ -1,0 +1,101 @@
+/* Homepage banner — first-time $99 intro (main site only, under hero) */
+
+.intro-site-promo {
+  padding: clamp(1.35rem, 3vw, 1.85rem) 0;
+  background: linear-gradient(135deg, #0a1628 0%, #0f2847 52%, #123456 100%);
+  border-block: 1px solid rgba(141, 198, 63, 0.22);
+}
+
+.intro-site-promo__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.15rem 1.75rem;
+}
+
+.intro-site-promo__copy {
+  flex: 1 1 18rem;
+  min-width: 0;
+  max-width: 42rem;
+}
+
+.intro-site-promo__kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(141, 198, 63, 0.95);
+}
+
+.intro-site-promo__title {
+  margin: 0 0 0.45rem;
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.intro-site-promo__price {
+  color: #8dc63f;
+  font-size: clamp(1.35rem, 2.8vw, 1.85rem);
+  font-weight: 900;
+}
+
+.intro-site-promo__lead {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.intro-site-promo__cta-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.intro-site-promo__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.8rem 1.25rem;
+  border-radius: 6px;
+  background: #8dc63f;
+  color: #0a1628;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 0 8px 22px rgba(141, 198, 63, 0.28);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.intro-site-promo__cta:hover {
+  background: #7ab832;
+  color: #0a1628;
+  transform: translateY(-1px);
+}
+
+.intro-site-promo__fine {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+@media (max-width: 720px) {
+  .intro-site-promo__cta-wrap {
+    width: 100%;
+  }
+
+  .intro-site-promo__cta {
+    width: 100%;
+  }
+}

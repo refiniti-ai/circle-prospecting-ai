@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-aws-staging
 .firebase
 report.zip
 temp-ref-*.jpg
@@ -9,12 +10,25 @@ temp-ref-*.jpg
 .env
 .env.local
 .env.*.local
-server/data/inventory.json
-server/data/orders.json
-server/data/purchase-confirmations.json
-server/data/client-accounts.json
-server/data/password-reset-tokens.json
-server/data/admin-credentials.json
-# Firebase Admin private keys — never commit
+
+# Credentials — never commit
 secrets/
-*firebase-adminsdk*.json
+*serviceAccountKey*.json
+*.pem
+*.p12
+
+# Runtime data written by the API (customer, order and payment records)
+server/data/*.json
+server/data/platform/
+!server/data/.gitkeep
+
+# Local scratch files and third-party data dumps
+_*.json
+tmp-*.json
+
+# Test payloads containing real contact details
+docs/email-templates/ghl-webhook-test-payload.json
+docs/ghl-workflow-test-*.json
+
+# Extracted copy of a previous deployment — not source (141 MB)
+deploy-recovery/

@@ -1,9 +1,27 @@
 import Stripe from "stripe";
 import { fulfillLeadPackFromSession } from "./leadFulfillment.js";
 import { opsLog } from "./opsLog.js";
-import { buildAdminPurchaseEmail, buildCustomerPurchaseEmail, sendTextEmail } from "./mailer.js";
+import {
+  buildAdminPurchaseEmail,
+  buildCustomerPurchaseEmail,
+  buildTeamOrderEmailCopy,
+  DEFAULT_ORDER_NOTIFICATION_EMAIL,
+  getMailTransportInfo,
+  sendTextEmail,
+  splitPersonName,
+} from "./mailer.js";
 import { canonicalCheckoutEmail, normalizePhoneDigits } from "./checkoutIdentity.js";
 import { updateGhlContactFields } from "./ghlContactFetch.js";
+import { safeSendMetaPurchaseCapi } from "./metaCapi.js";
+import { buildMlsCheckoutUrl } from "./payLinkTrack.js";
+import { parseAgentRoleInput } from "../src/lib/listingAgents.js";
+import { resolveRealMls } from "../src/lib/listingDraft.js";
+import {
+  serviceLineLabel,
+  tierRowMeta,
+  type LeadServiceLine,
+  type LeadTierId,
+} from "../src/lib/leadPricing.js";
 import {
   hasPurchaseNotification,
   isAdminPurchaseEmailSent,
@@ -13,6 +31,7 @@ import {
   markPurchaseNotification,
   orderNumberFromSessionId,
 } from "./purchaseConfirmStore.js";
+import { markCheckoutPaid } from "./checkoutFunnelStore.js";
 
 /**
  * Format a date in Eastern Time (America/New_York handles EST/EDT automatically).
@@ -43,12 +62,13 @@ function formatPaidAtEastern(d: Date): string {
 export function listLineItemsForCheckoutSession(session: Stripe.Checkout.Session): string[] {
   const expanded = session.line_items?.data || [];
   if (!expanded.length) {
-    if (session.metadata?.checkoutType === "lead_pack") {
+    if (session.metadata?.checkoutType === "lead_pack" || session.metadata?.checkoutType === "intro_campaign") {
       const n = session.metadata.requestedLeads || session.metadata.packSize || "";
       const svc = session.metadata.serviceLine ? String(session.metadata.serviceLine) : "";
       const tier = session.metadata.leadTier ? String(session.metadata.leadTier) : "";
       const bits = [n && `${n} leads`, svc, tier].filter(Boolean);
-      return [bits.length ? `Lead pack (${bits.join(" · ")})` : `Lead pack (${session.metadata.packSize || "unknown"} leads)`];
+      const label = session.metadata.checkoutType === "intro_campaign" ? "Intro campaign" : "Lead pack";
+      return [bits.length ? `${label} (${bits.join(" · ")})` : `${label} (${session.metadata.packSize || "unknown"} leads)`];
     }
     if (session.metadata?.checkoutType === "campaign") {
       return [
@@ -64,12 +84,69 @@ export function listLineItemsForCheckoutSession(session: Stripe.Checkout.Session
   });
 }
 
-function parseAdminRecipients(): string[] {
-  const raw = process.env.PURCHASE_NOTIFICATION_EMAIL || process.env.ADMIN_PURCHASE_EMAIL || "";
+function parseOrderNotificationRecipients(): string[] {
+  const raw =
+    process.env.PURCHASE_NOTIFICATION_EMAIL?.trim() ||
+    process.env.ADMIN_PURCHASE_EMAIL?.trim() ||
+    DEFAULT_ORDER_NOTIFICATION_EMAIL;
   return raw
-    .split(",")
+    .split(/[,;]/)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter((s) => s.includes("@"));
+}
+
+function listingTypeFromCampaignType(campaignType: string | null | undefined): string | null {
+  const t = (campaignType ?? "").trim().toLowerCase();
+  if (t === "just_sold") return "Just Sold";
+  if (t === "just_listed") return "Just Listed";
+  return null;
+}
+
+function purchaseMailRadius(s: Stripe.Checkout.Session): string | null {
+  const label = String(s.metadata?.radiusLabel || "").trim();
+  if (label) return label;
+  const miles = String(s.metadata?.radiusMiles || "").trim();
+  return miles ? `${miles} mi` : null;
+}
+
+function purchaseMailPlan(s: Stripe.Checkout.Session): string | null {
+  const sl = String(s.metadata?.serviceLine || "").trim() as LeadServiceLine;
+  const tier = String(s.metadata?.leadTier || "").trim() as LeadTierId;
+  const parts: string[] = [];
+  if (sl) {
+    try {
+      parts.push(serviceLineLabel(sl));
+    } catch {
+      parts.push(sl);
+    }
+  }
+  if (tier) {
+    try {
+      parts.push(tierRowMeta(tier).packageLabel);
+    } catch {
+      parts.push(tier);
+    }
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function purchaseMailHomes(s: Stripe.Checkout.Session, requestedLeads: number): string | null {
+  if (Number.isFinite(requestedLeads) && requestedLeads > 0) {
+    return requestedLeads.toLocaleString("en-US");
+  }
+  const raw = String(s.metadata?.requestedLeads || s.metadata?.packSize || "").trim();
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n.toLocaleString("en-US") : null;
+}
+
+function payLinkUrlFromSession(s: Stripe.Checkout.Session): string | null {
+  const mls = resolveRealMls(s.metadata?.mls);
+  if (!mls) return null;
+  const agentRole = parseAgentRoleInput(String(s.metadata?.agentRole || "")) ?? undefined;
+  return buildMlsCheckoutUrl(mls, {
+    agentRole,
+    listingType: listingTypeFromCampaignType(s.metadata?.campaignType),
+  });
 }
 
 /**
@@ -81,8 +158,10 @@ export async function applyPaidCheckoutSessionSideEffects(s: Stripe.Checkout.Ses
     return;
   }
 
-  if (s.metadata?.checkoutType === "lead_pack") {
-    fulfillLeadPackFromSession(s);
+  try {
+    markCheckoutPaid(s.id);
+  } catch (err) {
+    console.error("[checkoutFunnel] markCheckoutPaid failed", err);
   }
 
   const orderNumber = orderNumberFromSessionId(s.id);
@@ -100,6 +179,7 @@ export async function applyPaidCheckoutSessionSideEffects(s: Stripe.Checkout.Ses
       checkoutType: s.metadata?.checkoutType || "general",
       customerEmail,
       customerPhoneDigits,
+      customerPhone: String(s.metadata?.customerPhone || "").trim() || customerPhoneDigits || null,
       amountTotalCents: s.amount_total,
       currency: s.currency || null,
       lineItems,
@@ -108,20 +188,47 @@ export async function applyPaidCheckoutSessionSideEffects(s: Stripe.Checkout.Ses
       requestedLeads: Number.isFinite(rlNum) ? rlNum : null,
       targetingSummary:
         [s.metadata?.city, s.metadata?.county, s.metadata?.zip].filter(Boolean).join(", ") || null,
+      mls: resolveRealMls(s.metadata?.mls) || null,
+      listingAddress: s.metadata?.listingAddress || null,
+      agentName: s.metadata?.agentName || null,
+      brokerage: s.metadata?.brokerage || null,
+      campaignType: s.metadata?.campaignType || null,
+      radiusLabel: s.metadata?.radiusLabel || null,
     });
   }
 
+  let firstName = String(s.metadata?.firstName || "").trim();
+  let lastName = String(s.metadata?.lastName || "").trim();
+  if (!firstName && !lastName && s.metadata?.agentName) {
+    const split = splitPersonName(s.metadata.agentName);
+    firstName = split.firstName;
+    lastName = split.lastName;
+  }
+  const purchaseMailArgs = {
+    orderNumber,
+    checkoutType: s.metadata?.checkoutType || "general",
+    sessionId: s.id,
+    lineItems,
+    amountTotalCents: s.amount_total,
+    currency: s.currency,
+    firstName: firstName || null,
+    lastName: lastName || null,
+    agentEmail: customerEmail || String(s.metadata?.customerEmail || "").trim() || null,
+    agentPhone: String(s.metadata?.customerPhone || "").trim() || customerPhoneDigits || null,
+    payLinkUrl: payLinkUrlFromSession(s),
+    listingAddress: s.metadata?.listingAddress || null,
+    radius: purchaseMailRadius(s),
+    plan: purchaseMailPlan(s),
+    homesInOrder: purchaseMailHomes(s, rlNum),
+    mls: resolveRealMls(s.metadata?.mls) || null,
+  };
+
   if (customerEmail && !(await isCustomerReceiptEmailSent(s.id))) {
-    const mail = buildCustomerPurchaseEmail({
-      orderNumber,
-      checkoutType: s.metadata?.checkoutType || "general",
-      sessionId: s.id,
-      lineItems,
-      amountTotalCents: s.amount_total,
-      currency: s.currency,
-    });
+    const mail = buildCustomerPurchaseEmail(purchaseMailArgs);
     try {
-      const customerSend = await sendTextEmail(customerEmail, mail.subject, mail.text, mail.html);
+      const customerSend = await sendTextEmail(customerEmail, mail.subject, mail.text, mail.html, {
+        ghlExtras: mail.ghlFields,
+      });
       if (customerSend.mode === "skipped") {
         console.warn(
           "[purchase-email] Customer receipt not sent: no GHL_MAIL_WEBHOOK_URL, RESEND_API_KEY, or SMTP_* on the server (check Cloud Run env)."
@@ -140,25 +247,50 @@ export async function applyPaidCheckoutSessionSideEffects(s: Stripe.Checkout.Ses
     );
   }
 
-  const adminRecipients = parseAdminRecipients();
-  if (adminRecipients.length && !(await isAdminPurchaseEmailSent(s.id))) {
-    const adminMail = buildAdminPurchaseEmail({
-      orderNumber,
-      checkoutType: s.metadata?.checkoutType || "general",
+  const teamRecipients = parseOrderNotificationRecipients();
+  // GHL already drops a copy of the customer Send Email into the account inbox.
+  // A second API send (subject prefixed [Copy]) is the duplicate they were seeing.
+  const skipTeamCopy = getMailTransportInfo().mode === "ghl";
+  if (skipTeamCopy) {
+    console.info("[purchase-email] Skipping extra team copy — GHL already copies the customer receipt", {
       sessionId: s.id,
-      customerEmail: customerEmail || undefined,
-      lineItems,
-      amountTotalCents: s.amount_total,
-      currency: s.currency,
     });
+  } else if (teamRecipients.length && !(await isAdminPurchaseEmailSent(s.id))) {
+    const teamMail = customerEmail
+      ? buildTeamOrderEmailCopy({ ...purchaseMailArgs, customerEmail })
+      : null;
+    const adminMail =
+      teamMail ??
+      (() => {
+        const plain = buildAdminPurchaseEmail({
+          orderNumber,
+          checkoutType: s.metadata?.checkoutType || "general",
+          sessionId: s.id,
+          customerEmail: customerEmail || undefined,
+          lineItems,
+          amountTotalCents: s.amount_total,
+          currency: s.currency,
+        });
+        return { subject: plain.subject, text: plain.body, html: undefined, ghlFields: undefined };
+      })();
     try {
-      const adminSend = await sendTextEmail(adminRecipients.join(","), adminMail.subject, adminMail.body);
-      if (adminSend.mode !== "skipped") {
+      const teamSend = await sendTextEmail(
+        teamRecipients.join(","),
+        adminMail.subject,
+        adminMail.text,
+        adminMail.html,
+        adminMail.ghlFields ? { ghlExtras: adminMail.ghlFields } : undefined
+      );
+      if (teamSend.mode !== "skipped") {
         await markAdminPurchaseEmailSent(s.id);
-        console.info("[purchase-email] Admin notify sent", { sessionId: s.id, mode: adminSend.mode });
+        console.info("[purchase-email] Team order copy sent", {
+          sessionId: s.id,
+          mode: teamSend.mode,
+          recipients: teamRecipients.join(","),
+        });
       }
     } catch (e) {
-      console.error("[purchase-email] Admin notify send failed", s.id, e);
+      console.error("[purchase-email] Team order copy send failed", s.id, e);
     }
   }
 
@@ -183,9 +315,20 @@ export async function applyPaidCheckoutSessionSideEffects(s: Stripe.Checkout.Ses
     }
   }
 
+  if (s.metadata?.checkoutType === "lead_pack" || s.metadata?.checkoutType === "intro_campaign") {
+    try {
+      fulfillLeadPackFromSession(s);
+    } catch (e) {
+      console.error("[purchase] lead fulfillment failed after mail", s.id, e);
+      opsLog("allocate_leads_failed", { sessionId: s.id, error: e instanceof Error ? e.message : "unknown" });
+    }
+  }
+
   opsLog("purchase_pipeline_ok", {
     sessionId: s.id,
     orderNumber,
     checkoutType: s.metadata?.checkoutType || "general",
   });
+
+  safeSendMetaPurchaseCapi(s);
 }

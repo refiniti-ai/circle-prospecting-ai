@@ -25,7 +25,7 @@ export function LoginPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const clientResetToken = searchParams.get("client_reset")?.trim() ?? "";
-  const tab: Tab = searchParams.get("tab") === "admin" ? "admin" : "client";
+  const tab: Tab = clientResetToken ? "client" : "admin";
 
   const resetDone = Boolean((location.state as LocationState | null)?.resetDone);
 
@@ -87,12 +87,6 @@ export function LoginPage() {
         setAdminBoot(false);
       });
   }, [tab, navigate]);
-
-  function setTab(next: Tab) {
-    const p = new URLSearchParams();
-    if (next === "admin") p.set("tab", "admin");
-    setSearchParams(p, { replace: true });
-  }
 
   async function onClientSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -186,7 +180,7 @@ export function LoginPage() {
     <>
       <SeoHead
         title="Log in | Circle Prospecting AI"
-        description="Client dashboard or admin sign-in."
+        description="Sign in to Circle Prospecting AI."
         path="/login"
         noindex
       />
@@ -200,27 +194,6 @@ export function LoginPage() {
               </p>
               <h1 className="page-h1">Log in</h1>
             </header>
-
-            <div className="login-tab-bar" role="tablist" aria-label="Login type">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "client"}
-                className={`login-tab${tab === "client" ? " is-active" : ""}`}
-                onClick={() => setTab("client")}
-              >
-                Client
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "admin"}
-                className={`login-tab${tab === "admin" ? " is-active" : ""}`}
-                onClick={() => setTab("admin")}
-              >
-                Admin
-              </button>
-            </div>
 
             {tab === "client" && (
               <div role="tabpanel" aria-label="Client login">
@@ -383,25 +356,6 @@ export function LoginPage() {
                           disabled={adminBusy}
                         />
                       </label>
-                      <p
-                        className="muted"
-                        style={{
-                          margin: 0,
-                          fontSize: "0.8rem",
-                          lineHeight: 1.5,
-                          padding: "0.65rem 0.85rem",
-                          borderRadius: 12,
-                          background: "rgba(15, 23, 42, 0.04)",
-                          border: "1px solid rgba(15, 23, 42, 0.08)",
-                        }}
-                      >
-                        <strong style={{ color: "var(--text, #0f172a)" }}>Demo / test:</strong> username{" "}
-                        <code className="cp-kbd">admin</code> · password <code className="cp-kbd">changeme</code>
-                        <span style={{ display: "block", marginTop: "0.35rem", fontSize: "0.76rem", opacity: 0.9 }}>
-                          Default from <code className="cp-kbd">.env</code> — set a strong password on the server for production.
-                          After signing in, use <strong>Admin → Account</strong> to rotate it.
-                        </span>
-                      </p>
                       <button type="submit" className="btn btn-primary" disabled={adminBusy}>
                         {adminBusy ? "Signing in…" : "Open admin dashboard"}
                       </button>
@@ -416,34 +370,6 @@ export function LoginPage() {
         <SiteFooter />
       </div>
       <style>{`
-        .login-tab-bar {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 0.5rem;
-          margin-top: 0.5rem;
-        }
-        .login-tab {
-          text-align: center;
-          padding: 0.75rem 1rem;
-          border-radius: 12px;
-          border: 2px solid rgba(15, 23, 42, 0.12);
-          background: #fff;
-          cursor: pointer;
-          font: inherit;
-          font-weight: 600;
-          font-size: 0.95rem;
-          color: var(--muted);
-          transition: border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .login-tab:hover {
-          border-color: rgba(0, 122, 255, 0.35);
-          color: var(--text);
-        }
-        .login-tab.is-active {
-          border-color: rgba(0, 122, 255, 0.55);
-          color: var(--cp-blue, #007aff);
-          box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.12);
-        }
         .login-page-shell {
           box-sizing: border-box;
           padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));

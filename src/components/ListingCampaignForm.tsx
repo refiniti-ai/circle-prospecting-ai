@@ -6,11 +6,14 @@ type Props = {
   values: ListingFormValues;
   onChange: <K extends keyof ListingFormValues>(field: K, value: ListingFormValues[K]) => void;
   disabled?: boolean;
+  /** When true, MLS is read-only (canonical /mls/:id page — change MLS via search above). */
+  lockMls?: boolean;
   /** When true, agent contact fields are shown on separate buyer/seller cards. */
   propertyOnly?: boolean;
 };
 
-export function ListingCampaignForm({ values, onChange, disabled, propertyOnly }: Props) {
+export function ListingCampaignForm({ values, onChange, disabled, lockMls, propertyOnly }: Props) {
+  const mlsLocked = Boolean(lockMls);
   return (
     <div className="buy-listing-form">
       {!propertyOnly ? (
@@ -29,13 +32,16 @@ export function ListingCampaignForm({ values, onChange, disabled, propertyOnly }
               />
             </label>
             <label className="cp-form-grid">
-              <span className="muted-label">MLS #</span>
+              <span className="muted-label buy-label-key">MLS #</span>
               <input
                 type="text"
-                className="premium-input"
+                className="premium-input buy-input-key buy-input-locked"
                 value={values.mls}
                 onChange={(e) => onChange("mls", e.target.value)}
-                disabled={disabled}
+                disabled={disabled || mlsLocked}
+                readOnly={mlsLocked}
+                aria-readonly={mlsLocked}
+                title={mlsLocked ? "MLS is set from the URL — use Search above to open a different listing." : undefined}
                 placeholder="TB8502524"
               />
             </label>
@@ -79,11 +85,11 @@ export function ListingCampaignForm({ values, onChange, disabled, propertyOnly }
               />
             </label>
             <label className="cp-form-grid">
-              <span className="muted-label">Property address (street)</span>
+              <span className="muted-label buy-label-key">Property address (street)</span>
               <input
                 id="buy-listing-address"
                 type="text"
-                className="premium-input"
+                className="premium-input buy-input-key"
                 value={values.streetAddress}
                 onChange={(e) => onChange("streetAddress", e.target.value)}
                 disabled={disabled}
@@ -95,24 +101,27 @@ export function ListingCampaignForm({ values, onChange, disabled, propertyOnly }
         </>
       ) : (
         <label className="cp-form-grid">
-          <span className="muted-label">MLS #</span>
+          <span className="muted-label buy-label-key">MLS #</span>
           <input
             type="text"
-            className="premium-input"
+            className="premium-input buy-input-key buy-input-locked"
             value={values.mls}
             onChange={(e) => onChange("mls", e.target.value)}
-            disabled={disabled}
+            disabled={disabled || mlsLocked}
+            readOnly={mlsLocked}
+            aria-readonly={mlsLocked}
+            title={mlsLocked ? "MLS is set from the URL — use Search above to open a different listing." : undefined}
             placeholder="TB8502524"
           />
         </label>
       )}
       {propertyOnly ? (
         <label className="cp-form-grid">
-          <span className="muted-label">Property address (street)</span>
+          <span className="muted-label buy-label-key">Property address (street)</span>
           <input
             id="buy-listing-address"
             type="text"
-            className="premium-input"
+            className="premium-input buy-input-key"
             value={values.streetAddress}
             onChange={(e) => onChange("streetAddress", e.target.value)}
             disabled={disabled}

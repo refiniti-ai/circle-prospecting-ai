@@ -4,7 +4,7 @@ import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
 import { ListingMap } from "../components/ListingMap";
-import { getLocalDemoOrder, type ListingPayload, type RadiusId } from "../lib/listingData";
+import { getLocalDemoOrder, radiusRingLabel, type ListingPayload, type RadiusId } from "../lib/listingData";
 import { usePricingTiers } from "../context/PricingTiersContext";
 import {
   formatCurrency,
@@ -255,7 +255,7 @@ export function Order() {
                       onClick={() => setRadius(r)}
                       className={`order-pick-card ${active ? "is-active" : ""}`}
                     >
-                      <span className="order-pick-l">{label}</span>
+                      <span className="order-pick-l">{radiusRingLabel(r, label)}</span>
                       <span className="order-pick-v">{count.toLocaleString()}</span>
                       <span className="order-pick-s">homes</span>
                     </button>
@@ -290,7 +290,7 @@ export function Order() {
             <section className="section-surface order-summary" style={{ marginTop: "1rem" }}>
               <h2 className="premium-h2" style={{ fontSize: "1.05rem", marginBottom: "0.8rem" }}>Order summary</h2>
               <div className="order-summary-grid">
-                <div><span>Target area</span><strong>{l.radii[radius].label}</strong></div>
+                <div><span>Target area</span><strong>{radiusRingLabel(radius, l.radii[radius].label)}</strong></div>
                 <div><span>Homes</span><strong>{homeCount.toLocaleString()}</strong></div>
                 <div><span>Plan selected</span><strong>{planLabel(plan)}</strong></div>
                 <div><span>Rate / home</span><strong>{formatCurrency(unit)}</strong></div>

@@ -1,0 +1,1310 @@
+/* First-time customer campaign — isolated from buy-leads.css */
+
+:root {
+  --intro-green: #8dc63f;
+  --intro-green-dark: #6fad2e;
+  --intro-navy: #0c2340;
+  --intro-navy-mid: #12345c;
+  --intro-navy-card: #1a3a5c;
+}
+
+.intro-campaign-page {
+  background: #fff;
+}
+
+.intro-campaign-main {
+  padding-bottom: 0;
+}
+
+/* ── Flyer landing (client mockup) ── */
+
+.intro-flyer-page .site-footer {
+  margin-top: 0;
+}
+
+.intro-flyer-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  padding: 0.85rem 0;
+}
+
+.intro-flyer-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.intro-flyer-header__logo {
+  display: inline-flex;
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+}
+
+.intro-flyer-header__tagline {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.35;
+}
+
+.intro-flyer-hero {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  padding: 2.5rem 0 3rem;
+  min-height: clamp(420px, 52vw, 620px);
+  display: flex;
+  align-items: center;
+}
+
+.intro-flyer-hero--client-banner {
+  min-height: clamp(340px, 44vw, 520px);
+  padding: 1.75rem 0 2rem;
+}
+
+.intro-flyer-hero--client-banner .intro-flyer-hero__grid {
+  grid-template-columns: minmax(0, 0.52fr);
+}
+
+.intro-flyer-hero__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 36rem;
+}
+
+.intro-flyer-hero--client-banner .intro-flyer-hero__copy {
+  gap: 0.42rem;
+}
+
+.intro-flyer-hero__copy .intro-flyer-hero__tagline,
+.intro-flyer-hero__copy .intro-flyer-hero__title,
+.intro-flyer-hero__copy .intro-flyer-hero__sub,
+.intro-flyer-hero__copy .intro-flyer-hero__lead,
+.intro-flyer-hero__copy .intro-flyer-hero__price-callout {
+  margin: 0;
+}
+
+.intro-flyer-hero__copy .intro-flyer-checklist--hero {
+  margin: 0.1rem 0 0;
+}
+
+.intro-flyer-hero__copy .intro-flyer-checklist--hero li {
+  padding: 0.12rem 0 0.12rem 1.35rem;
+  font-size: 0.9rem;
+  line-height: 1.32;
+}
+
+.intro-flyer-hero__copy .intro-flyer-btn--hero {
+  margin-top: 0.35rem;
+  align-self: flex-start;
+}
+
+.intro-flyer-hero--client-banner .intro-flyer-hero__banner-picture {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.intro-flyer-hero--client-banner .intro-flyer-hero__banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center right;
+}
+
+.intro-flyer-hero--client-banner .intro-flyer-hero__photo {
+  background-position: center right;
+}
+
+.intro-single-plan {
+  margin-top: 1rem;
+}
+
+.intro-single-plan__title {
+  margin-bottom: 0.35rem;
+}
+
+.intro-single-plan__lead {
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+}
+
+.buy-plan-cards--single {
+  grid-template-columns: minmax(0, 520px);
+}
+
+.intro-single-plan__card {
+  pointer-events: none;
+}
+
+.intro-checkout-page.buy-leads-page {
+  background: var(--rz-page, #fafafa);
+}
+
+.intro-checkout__head {
+  margin: 1rem 0 1.25rem;
+}
+
+.intro-flyer-hero__overlay--light {
+  background: linear-gradient(
+    90deg,
+    rgba(7, 20, 40, 0.72) 0%,
+    rgba(7, 20, 40, 0.35) 42%,
+    rgba(7, 20, 40, 0.08) 68%,
+    transparent 100%
+  );
+}
+
+.intro-flyer-hero__tagline {
+  margin: 0 0 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.35;
+}
+
+.intro-flyer-hero__photo {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.03);
+}
+
+.intro-flyer-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(7, 20, 40, 0.92) 0%, rgba(7, 20, 40, 0.72) 48%, rgba(7, 20, 40, 0.35) 100%),
+    linear-gradient(180deg, rgba(7, 20, 40, 0.25), rgba(7, 20, 40, 0.55));
+}
+
+.intro-flyer-hero__rings {
+  position: absolute;
+  right: 18%;
+  top: 50%;
+  width: min(42vw, 420px);
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+  border: 2px solid rgba(141, 198, 63, 0.55);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 24px rgba(141, 198, 63, 0.14),
+    0 0 0 48px rgba(141, 198, 63, 0.08),
+    0 0 0 72px rgba(141, 198, 63, 0.04);
+  pointer-events: none;
+}
+
+.intro-flyer-hero__grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 2rem;
+  align-items: center;
+}
+
+.intro-flyer-hero__title {
+  margin: 0 0 0.65rem;
+  font-size: clamp(1.75rem, 3.1vw, 2.65rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.intro-flyer-accent {
+  color: var(--intro-green);
+}
+
+.intro-flyer-hero__sub {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.intro-flyer-hero__lead {
+  margin: 0 0 1rem;
+  max-width: 34rem;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.intro-flyer-checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.intro-flyer-checklist li {
+  position: relative;
+  padding: 0.28rem 0 0.28rem 1.45rem;
+  line-height: 1.45;
+}
+
+.intro-flyer-checklist li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--intro-green);
+  font-weight: 800;
+}
+
+.intro-flyer-checklist--hero li {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95rem;
+}
+
+.intro-flyer-hero__price-callout {
+  margin: 1rem 0 1.1rem;
+  font-size: 0.98rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.intro-flyer-hero__price-callout strong {
+  color: var(--intro-green);
+  font-size: 1.15rem;
+}
+
+.intro-flyer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.85rem 1.35rem;
+  border: none;
+  border-radius: 4px;
+  background: var(--intro-green);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(111, 173, 46, 0.35);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.intro-flyer-btn:hover {
+  background: var(--intro-green-dark);
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.intro-flyer-btn span {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.intro-flyer-btn--compact {
+  padding: 0.65rem 1rem;
+  font-size: 0.75rem;
+}
+
+.intro-flyer-hero__sign-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+}
+
+.intro-flyer-signpost {
+  position: relative;
+  width: min(100%, 250px);
+}
+
+.intro-flyer-signpost__pole {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  bottom: -12%;
+  width: 8px;
+  margin-left: -4px;
+  background: linear-gradient(180deg, #e2e8f0, #94a3b8);
+  border-radius: 4px;
+}
+
+.intro-flyer-signpost__board {
+  position: relative;
+  z-index: 1;
+  padding: 0.65rem 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.35);
+  text-align: center;
+  color: #0f172a;
+}
+
+.intro-flyer-signpost__banner {
+  margin: -0.65rem -0.65rem 0.55rem;
+  padding: 0.45rem 0.5rem;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intro-flyer-signpost__photo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 0.45rem;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #e2e8f0;
+}
+
+.intro-flyer-signpost__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.intro-flyer-signpost__name {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.intro-flyer-signpost__role,
+.intro-flyer-signpost__broker {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.intro-flyer-section-label {
+  margin: 0 0 1.25rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+  text-align: center;
+}
+
+.intro-flyer-steps {
+  padding: 2.5rem 0;
+  background: #f8fafc;
+}
+
+.intro-flyer-steps__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.intro-flyer-steps__item {
+  position: relative;
+  padding: 1.1rem 0.85rem;
+  text-align: center;
+}
+
+.intro-step-icon {
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto 0.45rem;
+  color: var(--intro-navy);
+}
+
+.intro-flyer-steps__n {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.intro-flyer-steps__item strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.92rem;
+  color: var(--intro-navy);
+}
+
+.intro-flyer-steps__item p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.intro-flyer-steps__arrow {
+  position: absolute;
+  right: -0.35rem;
+  top: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-top: 2px solid #cbd5e1;
+  border-right: 2px solid #cbd5e1;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.intro-flyer-split {
+  padding: 2.5rem 0;
+}
+
+.intro-flyer-split__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.intro-flyer-split__media {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.intro-flyer-split__photo {
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.intro-flyer-split__quote h2 {
+  text-align: left;
+}
+
+.intro-flyer-split__quote p {
+  margin: 0;
+  line-height: 1.65;
+  color: #475569;
+}
+
+.intro-flyer-included {
+  padding: 1.35rem 1.25rem;
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--intro-navy-card), var(--intro-navy));
+  color: #fff;
+}
+
+.intro-flyer-included__title {
+  margin: 0 0 0.85rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.intro-flyer-checklist--included li {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.9rem;
+}
+
+.intro-flyer-checklist--included li::before {
+  color: var(--intro-green);
+}
+
+.intro-flyer-offer {
+  padding: 2rem 0;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.intro-flyer-offer__inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1.25rem 1.75rem;
+  align-items: center;
+}
+
+.intro-flyer-offer__price {
+  margin: 0;
+  font-size: clamp(3.5rem, 8vw, 5.5rem);
+  line-height: 0.95;
+  font-weight: 900;
+  color: var(--intro-green);
+  letter-spacing: -0.04em;
+}
+
+.intro-flyer-offer__kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.intro-flyer-offer__lead {
+  margin: 0 0 0.65rem;
+  max-width: 34rem;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.intro-flyer-offer__trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.intro-flyer-offer__trust li {
+  position: relative;
+  padding-left: 1.1rem;
+}
+
+.intro-flyer-offer__trust li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--intro-green);
+  font-weight: 800;
+}
+
+.intro-flyer-search {
+  padding: 2.25rem 0 2rem;
+  background: linear-gradient(180deg, var(--intro-navy) 0%, var(--intro-navy-mid) 100%);
+}
+
+.intro-flyer-search--mid {
+  padding: 2.5rem 0;
+  background: #f8fafc;
+  border-block: 1px solid #e2e8f0;
+}
+
+.intro-flyer-search--mid .intro-flyer-search__title {
+  color: var(--intro-navy);
+}
+
+.intro-flyer-search__note--mid {
+  color: #64748b !important;
+  text-align: center;
+}
+
+.intro-flyer-search__note--mid a {
+  color: var(--intro-navy);
+  font-weight: 700;
+}
+
+.intro-flyer-search--mid .intro-search__panel--flyer {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+.intro-flyer-search__title {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.intro-flyer-search__note {
+  color: rgba(255, 255, 255, 0.72) !important;
+  text-align: center;
+}
+
+.intro-flyer-search__note a {
+  color: #fff;
+  font-weight: 700;
+}
+
+.intro-search__panel--flyer {
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.28);
+  border: none;
+  padding: clamp(1.2rem, 2.6vw, 1.75rem) clamp(1.15rem, 3vw, 1.85rem);
+}
+
+.intro-search__panel--flyer .intro-search-confirm {
+  padding: 0.5rem 0 0.35rem;
+  width: 100%;
+}
+
+.intro-search__panel--flyer .buy-search-status {
+  margin-top: 0.65rem;
+}
+
+.intro-flyer-recent {
+  padding: 2rem 0 1.5rem;
+  background: #f8fafc;
+}
+
+.intro-flyer-recent__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 1rem;
+}
+
+.intro-flyer-recent__cta-card {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.intro-flyer-recent__house {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  object-fit: cover;
+}
+
+.intro-flyer-recent__cta-copy {
+  padding: 1.15rem 1.1rem;
+  display: grid;
+  align-content: center;
+  gap: 0.55rem;
+}
+
+.intro-flyer-recent__cta-copy h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--intro-navy);
+}
+
+.intro-flyer-recent__cta-copy p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.intro-flyer-recent__list-wrap {
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+.intro-flyer-recent__list-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.intro-flyer-recent__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.intro-flyer-recent__list li {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.intro-flyer-recent__list img {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.intro-flyer-recent__list strong {
+  display: block;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.intro-flyer-recent__list span {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.intro-flyer-trust {
+  padding: 1rem 0 0;
+  background: #fff;
+}
+
+/* ── Legacy / checkout shared tokens ── */
+
+.intro-kicker {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.intro-accent {
+  color: #007aff;
+}
+
+.intro-search__note {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+}
+
+.intro-checkout {
+  padding: 1.5rem 0 2.5rem;
+}
+
+.intro-checkout__head {
+  margin-bottom: 1.25rem;
+}
+
+.intro-checkout__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.65rem;
+}
+
+.intro-checkout__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.intro-checkout__main {
+  display: grid;
+  gap: 1rem;
+}
+
+.intro-checkout__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.intro-checkout__summary dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.intro-checkout__summary dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.intro-checkout__price {
+  color: #007aff;
+  font-size: 1.15rem;
+}
+
+.intro-checkout__note {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+}
+
+.intro-checkout__warn {
+  margin: 0.65rem 0 0;
+  color: #b45309;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.intro-checkout__pay {
+  margin-top: 0.85rem;
+  width: 100%;
+}
+
+.intro-checkout__sticky {
+  position: sticky;
+  top: 5.5rem;
+}
+
+.intro-checkout__aside-title {
+  margin: 0 0 0.35rem;
+}
+
+.intro-checkout__aside-line {
+  margin: 0 0 0.5rem;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.intro-checkout__aside-total {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.intro-checkout__aside-total strong {
+  font-size: 1.65rem;
+}
+
+.intro-campaign-page.intro-checkout-page {
+  background: #f4f7fb;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 1024px) {
+  .intro-flyer-hero__grid,
+  .intro-flyer-hero--client-banner .intro-flyer-hero__grid,
+  .intro-flyer-split__grid,
+  .intro-flyer-offer__inner,
+  .intro-flyer-recent__grid,
+  .intro-flyer-recent__cta-card,
+  .intro-flyer-split__media {
+    grid-template-columns: 1fr;
+  }
+
+  .intro-flyer-hero__rings {
+    right: 8%;
+    width: min(55vw, 320px);
+    opacity: 0.65;
+  }
+
+  .intro-flyer-steps__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .intro-flyer-steps__arrow {
+    display: none;
+  }
+
+  .intro-flyer-offer__inner {
+    justify-items: start;
+  }
+
+  .intro-flyer-header__tagline {
+    text-align: left;
+    max-width: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .intro-flyer-hero,
+  .intro-flyer-hero--client-banner {
+    padding: 1.25rem 0 1.5rem;
+    min-height: auto;
+  }
+
+  .intro-flyer-hero--client-banner .intro-flyer-hero__copy {
+    gap: 0.32rem;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-hero__title {
+    font-size: clamp(1.45rem, 6.2vw, 1.85rem);
+    line-height: 1.08;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-hero__tagline {
+    font-size: 0.65rem;
+    line-height: 1.3;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-hero__sub {
+    font-size: 0.95rem;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-hero__lead {
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-checklist--hero li {
+    font-size: 0.84rem;
+    padding: 0.08rem 0 0.08rem 1.25rem;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-hero__price-callout {
+    font-size: 0.9rem;
+  }
+
+  .intro-flyer-hero__copy .intro-flyer-btn--hero {
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+
+  .intro-flyer-hero--client-banner .intro-flyer-hero__photo {
+    background-position: 70% center;
+  }
+
+  .intro-flyer-hero__sign-wrap {
+    min-height: auto;
+    margin-top: 0.5rem;
+  }
+
+  .intro-flyer-steps__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intro-flyer-offer__price {
+    font-size: 3.25rem;
+  }
+
+  .intro-flyer-btn {
+    width: 100%;
+  }
+
+  .intro-flyer-header__inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .intro-checkout__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intro-checkout__sticky {
+    position: static;
+  }
+}
+
+@media (max-width: 600px) {
+  .intro-checkout__summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Intro search: agent hits + listing picker (first-time-customer only) ── */
+
+.intro-search .intro-agent-hit__name {
+  font-weight: 800;
+  color: var(--text, #0f172a);
+}
+
+.intro-search .intro-agent-hit__meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-weight: 700;
+  color: var(--text, #1e293b);
+  line-height: 1.4;
+}
+
+.intro-agent-listings {
+  margin-top: 0.5rem;
+}
+
+.intro-agent-listings__agent {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.intro-agent-listings__label {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.intro-agent-listings__name {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text, #0f172a);
+}
+
+.intro-agent-listings__meta {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text, #1e293b);
+}
+
+.intro-agent-listings__group {
+  margin-bottom: 1rem;
+}
+
+.intro-agent-listings__group-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(15, 23, 42, 0.65);
+}
+
+.intro-agent-listings__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.intro-listing-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.intro-listing-pick:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.intro-listing-pick__badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.intro-listing-pick__badge--just_listed {
+  background: rgba(141, 198, 63, 0.2);
+  color: #3d6b12;
+}
+
+.intro-listing-pick__badge--listed {
+  background: rgba(141, 198, 63, 0.2);
+  color: #3d6b12;
+}
+
+.intro-listing-pick__badge--just_sold {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+}
+
+.intro-listing-pick__badge--sold {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+}
+
+.intro-listing-pick__badge--buyer {
+  background: rgba(124, 58, 237, 0.14);
+  color: #5b21b6;
+}
+
+.intro-search-hits--capped {
+  max-height: 14.5rem;
+  overflow-y: auto;
+}
+
+.intro-listing-pick__mls {
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.intro-listing-pick__addr {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: rgba(15, 23, 42, 0.75);
+}
+
+.intro-agent-listings__back {
+  margin-top: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.intro-agent-listings__empty {
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+}
+
+.intro-search-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 0.25rem 0;
+}
+
+.intro-property-card {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 1rem 1.15rem;
+  width: 100%;
+  max-width: 520px;
+  padding: 1.25rem 1.35rem;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+}
+
+.intro-property-card-btn {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.intro-property-card-btn:hover:not(:disabled) .intro-property-card,
+.intro-property-card-btn:focus-visible .intro-property-card {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+}
+
+.intro-property-card-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.intro-agent-listings__list--cards {
+  gap: 0.75rem;
+}
+
+.intro-agent-listings__list--cards .intro-property-card {
+  max-width: none;
+}
+
+.intro-property-card__media {
+  align-self: start;
+}
+
+.intro-property-card__photo.listing-photo--thumb {
+  width: 108px;
+  height: 81px;
+  border-radius: 8px;
+}
+
+.intro-property-card__body {
+  min-width: 0;
+}
+
+.intro-property-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.intro-property-card__kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.intro-property-card__badge {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+}
+
+.intro-property-card__badge--just_listed {
+  background: rgba(141, 198, 63, 0.22);
+  color: #3d6b12;
+}
+
+.intro-property-card__badge--just_sold {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+}
+
+.intro-property-card__street {
+  margin: 0 0 0.15rem;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text, #0f172a);
+}
+
+.intro-property-card__city {
+  margin: 0 0 0.45rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.72);
+}
+
+.intro-property-card__meta {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.intro-property-card__agent {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--text, #1e293b);
+}
+
+.intro-property-card__radius {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.65);
+}
+
+.intro-search-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem 1.15rem;
+  width: 100%;
+  max-width: 520px;
+  padding: 0.35rem 0 0.15rem;
+}
+
+@media (max-width: 480px) {
+  .intro-property-card {
+    grid-template-columns: 88px minmax(0, 1fr);
+    padding: 1rem 1.05rem;
+  }
+
+  .intro-property-card__photo.listing-photo--thumb {
+    width: 88px;
+    height: 66px;
+  }
+
+  .intro-property-card__street {
+    font-size: 0.92rem;
+  }
+}
+

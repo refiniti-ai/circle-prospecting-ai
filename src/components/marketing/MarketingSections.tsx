@@ -12,9 +12,14 @@ import { ListingMap } from "../ListingMap";
 import { DummyListingMapPreview } from "./DummyListingMapPreview";
 import { SAMPLE_LISTING } from "../../lib/listingData";
 import { StatBarGlyph, IconCheck, PlayIcon } from "./icons";
-import { usePricingTiers } from "../../context/PricingTiersContext";
-import { formatCurrency, lowestPerHomeRate, tiersToTableRows } from "../../lib/pricing";
-import { HeroDashboardPreview } from "./HeroDashboardPreview";
+import {
+  checkoutServiceLines,
+  FLAT_PER_HOME_USD,
+  formatMoneyUsd,
+  LEAD_PRICE_MATRIX,
+  LEAD_TIERS,
+} from "../../lib/leadPricing";
+import { HomepageCampaignPreview } from "./HomepageCampaignPreview";
 import { PlanPickerStillShot } from "./PlanPickerStillShot";
 import {
   MARKETING_IMG,
@@ -41,6 +46,7 @@ import {
   DIFFERENTIATION_OTHER,
   DIFFERENTIATION_OURS,
   PRODUCT_UI_GUIDE_CHAT,
+  DEMO_MLS_ID,
 } from "./marketingData";
 
 /** Stagger delay index for `--rz-stagger` (used with `.rz-stagger-child`). */
@@ -336,7 +342,7 @@ export function RzEditorialHero() {
           <RzPrimaryCtas />
         </div>
         <div className="rz-hero-v2-visual">
-          <HeroDashboardPreview />
+          <HomepageCampaignPreview />
         </div>
       </div>
     </section>
@@ -481,8 +487,8 @@ export function RzCircleShowcase() {
         bullets={REZ_SHOWCASE_CIRCLE.bullets}
         afterBullets={
           <>
-            <Link to="/order/948" className="btn btn-primary rz-btn-soft">
-              View demo listing order
+            <Link to={`/mls/${DEMO_MLS_ID}`} className="btn btn-primary rz-btn-soft">
+              View demo listing checkout
               <span aria-hidden>→</span>
             </Link>
             <Link to="/campaign-pricing" className="btn btn-ghost rz-btn-soft">
@@ -972,8 +978,8 @@ export function CircleProductSection() {
             Orders open with the property already pinned. Agents choose subdivision-through-ZIP rings, compare live / AI / data lanes, and
             checkout—then we contact homeowners so conversations come back to you.
           </p>
-          <Link to="/order/948" className="btn btn-primary">
-            Open demo order (948)
+          <Link to={`/mls/${DEMO_MLS_ID}`} className="btn btn-primary">
+            Open demo checkout
           </Link>
         </div>
       </div>
@@ -1063,49 +1069,58 @@ export function BeforeAfterSection() {
 }
 
 const PRICING_INCLUDED = [
-  "Per-homeowner pricing inside the ring—see cost per touch before you buy (live, AI, hybrid, data lanes)",
+  "Per-homeowner pricing inside your target ring—see cost before you commit",
   "Volume packages (Dabble → Scale) with server-verified totals at checkout",
-  "Outcome focus: you’re buying executed outreach, not a static CSV",
-  "Dashboard + exports for dispositions, callbacks, and CRM handoffs",
+  "Live Callers for conversations, or Data Only for verified homeowner exports",
+  "Dashboard access for dispositions, callbacks, and CRM handoffs",
 ];
 
-export function CampaignPricingSection({ animateOnScroll = false }: { animateOnScroll?: boolean }) {
+export function CampaignPricingSection({
+  animateOnScroll = false,
+  compactHead = false,
+}: {
+  animateOnScroll?: boolean;
+  compactHead?: boolean;
+}) {
   const scroll = useScrollReveal({ enabled: animateOnScroll });
-  const { tiers, loading, error } = usePricingTiers();
-  const rows = tiersToTableRows(tiers);
-  const fromRate = lowestPerHomeRate(tiers);
+  const serviceLines = checkoutServiceLines();
+  const fromRate = Math.min(
+    ...serviceLines.map((line) => LEAD_PRICE_MATRIX[line.id][0] ?? FLAT_PER_HOME_USD)
+  );
 
   return (
     <section
+      id="pricing"
       className={`rz-section rz-section--white home-section rz-pricing-section rz-pricing-section--rez${animateOnScroll ? ` ${scroll.revealClassName}` : ""}`}
     >
       {animateOnScroll ? <div ref={scroll.sentinelRef} className="rz-reveal-sentinel" aria-hidden /> : null}
       <div className="container rz-pricing-rez-container">
-        <div className="rz-pricing-rez-head">
-          <p className={`rz-kicker-sans${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(0) } : {})}>
-            Pricing
-          </p>
-          <h2 className={`rz-pricing-rez-title${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(1) } : {})}>
-            Clear per-homeowner cost, clear packages, clear outcome value.
-          </h2>
-          <p
-            className={`rz-pricing-rez-lead${animateOnScroll ? " rz-stagger-child" : ""}`}
-            {...(animateOnScroll ? { style: stag(2) } : {})}
-          >
-            Pick your lane (live, AI, hybrid, data), choose how many homeowners to reach, and see total campaign spend before you pay. Benchmark:
-            strong programs often see 20+ conversations per ~10,000 homeowners—your market and follow-up will vary. Live grid below matches checkout.
-          </p>
-        </div>
+        {!compactHead ? (
+          <div className="rz-pricing-rez-head">
+            <p className={`rz-kicker-sans${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(0) } : {})}>
+              Pricing
+            </p>
+            <h2 className={`rz-pricing-rez-title${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(1) } : {})}>
+              Clear per-homeowner cost, clear packages, clear outcome value.
+            </h2>
+            <p
+              className={`rz-pricing-rez-lead${animateOnScroll ? " rz-stagger-child" : ""}`}
+              {...(animateOnScroll ? { style: stag(2) } : {})}
+            >
+              Choose how many homeowners to reach, pick <strong>Live Callers</strong> or <strong>Data Only</strong>, and see your total before you pay. Rates below match the buy-leads checkout.
+            </p>
+          </div>
+        ) : null}
 
         <div className={`rz-pricing-rez-surface${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(3) } : {})}>
           <div className="rz-pricing-rez-top">
             <div className="rz-pricing-rez-price-block">
               <span className="rz-pricing-rez-from">From</span>
               <div className="rz-pricing-rez-price-row">
-                <span className="rz-price-num">{formatCurrency(fromRate)}</span>
+                <span className="rz-price-num">{formatMoneyUsd(fromRate)}</span>
                 <span className="rz-pricing-rez-per">/ home</span>
               </div>
-              <p className="rz-price-sub">At volume with AI · scales by homes in ring.</p>
+              <p className="rz-price-sub">Per homeowner · scales with package band and ring size.</p>
             </div>
             <div className="rz-pricing-rez-includes">
               <h3 className="rz-included-title">What&apos;s included</h3>
@@ -1120,38 +1135,42 @@ export function CampaignPricingSection({ animateOnScroll = false }: { animateOnS
             <table className="data-table rezora-data-table rz-pricing-rez-table">
               <thead>
                 <tr>
-                  <th>Homes in ring</th>
-                  <th>Live / home</th>
-                  <th>AI / home</th>
-                  <th>Pro / home</th>
+                  <th>Package</th>
+                  <th>Volume</th>
+                  {serviceLines.map((line) => (
+                    <th key={line.id}>{line.label} / home</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row[0]}>
-                    {row.map((c) => (
-                      <td key={`${row[0]}-${c}`}>{c}</td>
+                {LEAD_TIERS.map((tier, idx) => (
+                  <tr key={tier.id}>
+                    <td>{tier.packageLabel}</td>
+                    <td>{tier.homesLabel}</td>
+                    {serviceLines.map((line) => (
+                      <td key={line.id}>{formatMoneyUsd(LEAD_PRICE_MATRIX[line.id][idx] ?? FLAT_PER_HOME_USD)}</td>
                     ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {compactHead ? (
+            <p className="rz-pricing-rez-footnote rz-pricing-rez-footnote--inline">
+              Ringless voicemail, SMS, and reporting included on outreach lanes where configured.
+            </p>
+          ) : null}
         </div>
 
-        <div className={`rz-pricing-rez-cta${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(4) } : {})}>
-          <Link to="/buy-leads" className="btn btn-primary btn-wide rz-pricing-rez-btn">
-            Start prospecting your area
-          </Link>
-          <p className="rz-pricing-rez-footnote">
-            Need a procurement packet? We&apos;ll mirror your tier sheet on the API host — not exposed in the browser.
-          </p>
-        </div>
-
-        {loading && !error ? (
-          <p className="rz-pricing-rez-status" aria-live="polite">
-            Refreshing live rates…
-          </p>
+        {!compactHead ? (
+          <div className={`rz-pricing-rez-cta${animateOnScroll ? " rz-stagger-child" : ""}`} {...(animateOnScroll ? { style: stag(4) } : {})}>
+            <Link to="/buy-leads" className="btn btn-primary btn-wide rz-pricing-rez-btn">
+              Start prospecting your area
+            </Link>
+            <p className="rz-pricing-rez-footnote">
+              Ringless voicemail, SMS, and reporting included on outreach lanes where configured.
+            </p>
+          </div>
         ) : null}
       </div>
     </section>

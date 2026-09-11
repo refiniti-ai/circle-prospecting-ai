@@ -1093,6 +1093,15 @@ a {
   margin: 0 auto clamp(2rem, 5vw, 3.5rem);
 }
 
+.rz-pricing-rez-head--compact {
+  margin-top: 0;
+  margin-bottom: clamp(1.25rem, 3vw, 2rem);
+}
+
+.rz-pricing-page .rz-pricing-section {
+  padding-top: 0.5rem;
+}
+
 .rz-pricing-rez-title {
   font-family: var(--font-plus-jakarta);
   font-weight: 800;
@@ -1192,6 +1201,13 @@ a {
   color: var(--rz-text-muted);
   font-weight: 500;
   max-width: 420px;
+}
+
+.rz-pricing-rez-footnote--inline {
+  margin: 0;
+  padding: 0 clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 3vw, 2rem);
+  max-width: none;
+  text-align: center;
 }
 
 .rz-pricing-rez-status {
@@ -1608,6 +1624,25 @@ img.rz-footer-rez-logo {
   height: 6px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--cp-blue), var(--cp-lime));
+}
+
+/* Homepage differentiation — client: left column copy aligned right */
+.rz-differentiation-split .rz-compare-left {
+  text-align: right;
+}
+
+.rz-differentiation-split .rz-compare-left .rz-rez-kicker {
+  display: block;
+}
+
+.rz-differentiation-split .rz-compare-left .rz-compare-list li {
+  padding-left: 0;
+  padding-right: 1.35rem;
+}
+
+.rz-differentiation-split .rz-compare-left .rz-compare-list li::before {
+  left: auto;
+  right: 0;
 }
 
 /* —— Testimonial deck —— */
@@ -5042,12 +5077,15 @@ img.rz-footer-rez-logo {
 .rz-poster-pricing-col-head {
   padding: 1rem 1rem 0.75rem;
   border-top: 4px solid var(--rz-poster-accent);
+  min-height: 5.75rem;
+  box-sizing: border-box;
 }
 
 .rz-poster-pricing-col-title {
   margin: 0 0 0.35rem;
   font-size: 1.05rem;
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .rz-poster-pricing-col-blurb {
@@ -5055,6 +5093,10 @@ img.rz-footer-rez-logo {
   font-size: 0.8rem;
   color: var(--rz-poster-muted);
   line-height: 1.45;
+}
+
+.rz-poster-pricing-col .rz-poster-mini-table thead th {
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .rz-poster-mini-table-wrap {
@@ -5104,8 +5146,13 @@ img.rz-footer-rez-logo {
   margin: 0 0 2rem;
   font-size: 0.78rem;
   line-height: 1.5;
-  color: var(--rz-poster-muted);
+  color: #fff;
   max-width: 85ch;
+}
+
+.rz-poster-pricing-col-head .rz-poster-pricing-col-blurb {
+  color: inherit;
+  opacity: 0.92;
 }
 
 .rz-poster-radius {
@@ -5228,6 +5275,10 @@ img.rz-footer-rez-logo {
   .rz-poster-footer-cta {
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
+  }
+
+  .rz-poster-footer-cta--compact {
+    grid-template-columns: 1fr auto;
   }
 }
 

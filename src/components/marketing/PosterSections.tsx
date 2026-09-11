@@ -1,28 +1,32 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { BrandLogo } from "../BrandLogo";
+import { StartProspectingButton } from "../StartProspectingButton";
 import { MarketingBrandMark } from "./MarketingBrandMark";
-import { contactEmail } from "../../lib/siteConfig";
-import { formatCurrency, type CampaignTier } from "../../lib/pricing";
-import { usePricingTiers } from "../../context/PricingTiersContext";
+import { contactInboxEmail, contactPhoneDisplay } from "../../lib/siteConfig";
+import { formatMoneyUsd, LEAD_PRICE_MATRIX, LEAD_SERVICE_LINES, LEAD_TIERS } from "../../lib/leadPricing";
+import { FlyerNeighborhoodSection } from "./FlyerNeighborhoodSection";
 import { TargetingRadiusStrip } from "./TargetingRadiusStrip";
 import {
   LISTING_SALES_PROCESS_STEPS,
   OPPORTUNITY_COUNT_DEMO,
-  POSTER_DATA_PER_HOME_FALLBACK,
+  FLYER_PILLAR_IMAGE,
+  FLYER_TESTIMONIALS,
+  POSTER_FOOTER_COPY,
+  POSTER_FOOTER_CTA,
+  POSTER_FOOTER_TAGLINE,
   POSTER_PILLARS,
   POSTER_SHEET_BENEFITS,
+  POSTER_SHEET_HEADLINE,
+  POSTER_SHEET_INTRO,
+  POSTER_SHEET_KICKER,
   POSTER_SHEET_PROMISE,
   POSTER_SHEET_QUOTE,
+  POSTER_SHEET_TAGLINE,
   POSTER_TESTIMONIALS_HEADLINE,
   PROCESS_FOOTER_CHANNELS,
   PROCESS_SUMMARY_POINTS,
-  TESTIMONIALS,
-  VOLUME_PACKAGE_LABELS,
 } from "./marketingData";
-
-function tierHomesLabel(t: CampaignTier): string {
-  if (t.max === Number.POSITIVE_INFINITY) return `${t.min.toLocaleString()}+ homes`;
-  return `${t.min.toLocaleString()}–${t.max.toLocaleString()} homes`;
-}
 
 function PosterPillarIcon({ kind }: { kind: "ai" | "live" | "leads" }) {
   const common = { width: 28, height: 28, viewBox: "0 0 24 24" as const, fill: "none" as const, stroke: "currentColor", strokeWidth: 1.65, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
@@ -120,77 +124,116 @@ function RadarBackdrop() {
 }
 
 /** Dark “agent sales sheet” pricing grid — mirrors print one-pager layout. */
-export function PricingProductSheetSection({ showTestimonialStrip = true }: { showTestimonialStrip?: boolean }) {
-  const { tiers, loading, error } = usePricingTiers();
+const POSTER_PRICING_COLUMNS: {
+  lineId: "live_callers" | "ai_outreach" | "hybrid" | "data_only";
+  title: string;
+  accent: string;
+  blurb: ReactNode;
+}[] = [
+  {
+    lineId: "live_callers",
+    title: "Live Callers",
+    accent: "var(--rz-poster-live)",
+    blurb: "Professional U.S.-based callers have real conversations and qualify homeowners by phone.",
+  },
+  {
+    lineId: "ai_outreach",
+    title: "AI Outreach",
+    accent: "var(--rz-poster-ai)",
+    blurb: "Automated multi-channel outreach via email, SMS, and ringless voicemail with AI lead discovery.",
+  },
+  {
+    lineId: "hybrid",
+    title: "Hybrid (AI + Live)",
+    accent: "var(--rz-poster-hybrid)",
+    blurb: "AI identifies and nurtures leads, then our live callers follow up to qualify with real conversations.",
+  },
+  {
+    lineId: "data_only",
+    title: "Data Only",
+    accent: "var(--rz-poster-data)",
+    blurb: "Access verified homeowner data within your target area to power your own outreach.",
+  },
+];
 
-  const columns = [
-    {
-      key: "live" as const,
-      title: "Live callers",
-      accent: "var(--rz-poster-live)",
-      blurb: "U.S.-based reps for dialogue and qualification.",
-    },
-    {
-      key: "ai" as const,
-      title: "AI outreach",
-      accent: "var(--rz-poster-ai)",
-      blurb: "Scaled touches — calls, voicemail & SMS where configured.",
-    },
-    {
-      key: "pro" as const,
-      title: "Hybrid",
-      accent: "var(--rz-poster-hybrid)",
-      blurb: "AI coverage plus live follow-up in one lane.",
-    },
-    {
-      key: "data" as const,
-      title: "Data / export",
-      accent: "var(--rz-poster-data)",
-      blurb: "List intelligence for your own outreach (availability varies).",
-    },
-  ];
-
-  const sheetTestimonials = TESTIMONIALS.slice(0, 3);
+export function PricingProductSheetSection({
+  showTestimonialStrip = true,
+  showFooterPitch = true,
+  theme = "dark",
+}: {
+  showTestimonialStrip?: boolean;
+  /** When false, dominate pitch renders in CampaignPricingFlyerFooter on /campaign-pricing */
+  showFooterPitch?: boolean;
+  /** `flyer` = white agent sales sheet (print PDF); `dark` = legacy dark poster */
+  theme?: "dark" | "flyer";
+}) {
+  const sheetTestimonials = FLYER_TESTIMONIALS;
+  const phone = contactPhoneDisplay();
+  const isFlyer = theme === "flyer";
 
   return (
-    <section className="rz-sales-poster rz-sales-poster--pricing" aria-labelledby="rz-poster-pricing-h">
+    <section
+      id="pricing"
+      className={`rz-sales-poster rz-sales-poster--pricing${isFlyer ? " rz-sales-poster--flyer" : ""}`}
+      aria-labelledby="rz-poster-pricing-h"
+    >
       <div className="container rz-sales-poster-inner">
-        <div className="rz-poster-brand-bar">
-          <div className="rz-poster-brand-lockup">
-            <MarketingBrandMark size={44} className="rz-poster-brand-mark" />
-            <div>
-              <p className="rz-poster-brand-name">Circle Prospecting AI</p>
-              <p className="rz-poster-brand-tag">Automated prospecting for modern real estate</p>
-            </div>
-          </div>
-          <p className="rz-poster-brand-promise">More conversations · More listings · Built for agents</p>
+        <div className="rz-poster-brand-bar cp-poster-brand-bar">
+          <Link to="/" className="cp-poster-brand-logo-link" aria-label="Circle Prospecting AI home">
+            {isFlyer ? (
+              <BrandLogo variant="header" className="cp-poster-brand-logo-img" />
+            ) : (
+              <img
+                src="/logo.svg"
+                alt="Circle Prospecting AI"
+                className="cp-poster-brand-logo-img"
+                width={320}
+                height={48}
+                draggable={false}
+              />
+            )}
+          </Link>
+          <p className="rz-poster-brand-promise cp-poster-brand-promise">
+            More conversations · More listings · More closings · <strong>Built for agents</strong>
+          </p>
         </div>
 
         <header className="rz-poster-head">
           <div>
-            <p className="rz-poster-eyebrow">Campaign pricing</p>
+            <p className="rz-poster-eyebrow">{POSTER_SHEET_KICKER}</p>
             <h2 id="rz-poster-pricing-h" className="rz-poster-title">
-              Agent sales sheet
+              {POSTER_SHEET_HEADLINE}
             </h2>
-            <p className="rz-poster-sub">
-              Per-homeowner pricing by volume band. Checkout is always the source of truth — this layout matches how teams print and share the
-              offer.
-            </p>
+            <p className="rz-poster-sheet-tagline">{POSTER_SHEET_TAGLINE}</p>
+            <p className="rz-poster-sub">{POSTER_SHEET_INTRO}</p>
           </div>
           <div className="rz-poster-callout">
-            <p className="rz-poster-callout-lead">More conversations. More listings.</p>
-            <p className="rz-poster-callout-sub">Built for agents who want execution — not another DIY dialer.</p>
+            <p className="rz-poster-callout-lead">More conversations. More listings. More closings.</p>
+            <p className="rz-poster-callout-sub">Built for agents who want neighborhood execution—not another DIY dialer.</p>
+            <StartProspectingButton className="rz-poster-callout-cta" />
           </div>
         </header>
 
-        <TargetingRadiusStrip />
+        {isFlyer ? <FlyerNeighborhoodSection /> : <TargetingRadiusStrip variant="dark" />}
 
         <ul className="rz-poster-pillars" aria-label="What powers the program">
           {POSTER_PILLARS.map((p) => (
             <li key={p.title} className="rz-poster-pillar">
-              <span className={`rz-poster-pillar-icon rz-poster-pillar-icon--${p.icon}`}>
-                <PosterPillarIcon kind={p.icon} />
-              </span>
+              {isFlyer ? (
+                <img
+                  src={FLYER_PILLAR_IMAGE[p.icon]}
+                  alt=""
+                  className="rz-poster-pillar-icon-img"
+                  width={64}
+                  height={64}
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : (
+                <span className={`rz-poster-pillar-icon rz-poster-pillar-icon--${p.icon}`}>
+                  <PosterPillarIcon kind={p.icon} />
+                </span>
+              )}
               <span className="rz-poster-pillar-title">{p.title}</span>
               <span className="rz-poster-pillar-d">{p.d}</span>
             </li>
@@ -198,13 +241,15 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
         </ul>
 
         <div className="rz-poster-pricing-grid">
-          {columns.map((col) => (
+          {POSTER_PRICING_COLUMNS.map((col) => {
+            const line = LEAD_SERVICE_LINES.find((l) => l.id === col.lineId)!;
+            return (
             <div
-              key={col.key}
+              key={col.lineId}
               className="rz-poster-pricing-col"
               style={{ ["--rz-poster-accent" as string]: col.accent }}
             >
-              <div className="rz-poster-pricing-col-head">
+              <div className="rz-poster-pricing-col-head" style={{ background: line.headerBg, color: line.headerText }}>
                 <h3 className="rz-poster-pricing-col-title">{col.title}</h3>
                 <p className="rz-poster-pricing-col-blurb">{col.blurb}</p>
               </div>
@@ -220,31 +265,35 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
                     </tr>
                   </thead>
                   <tbody>
-                    {tiers.map((tier, i) => {
-                      const pkg = VOLUME_PACKAGE_LABELS[i] ?? `Band ${i + 1}`;
-                      const homes = tierHomesLabel(tier);
-                      const rate =
-                        col.key === "data"
-                          ? POSTER_DATA_PER_HOME_FALLBACK[Math.min(i, POSTER_DATA_PER_HOME_FALLBACK.length - 1)]!
-                          : tier.rates[col.key as "ai" | "live" | "pro"];
-                      return (
-                        <tr key={`${col.key}-${tier.min}`}>
-                          <td>{pkg}</td>
-                          <td>{homes}</td>
-                          <td className="rz-poster-mini-num">{formatCurrency(rate)}</td>
+                    {LEAD_TIERS.map((tier, idx) => (
+                        <tr
+                          key={`${col.lineId}-${tier.id}`}
+                          className={tier.id === "dominate" ? "rz-poster-mini-row--dominate" : undefined}
+                        >
+                          <td>
+                            {tier.packageLabel}
+                            {tier.id === "dominate" ? (
+                              <span className="rz-poster-dominate-star" aria-hidden>
+                                {" "}
+                                ★
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>{tier.homesLabel}</td>
+                          <td className="rz-poster-mini-num">{formatMoneyUsd(LEAD_PRICE_MATRIX[col.lineId][idx])}</td>
                         </tr>
-                      );
-                    })}
+                      ))}
                   </tbody>
                 </table>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <p className="rz-poster-data-note">
-          Data / export column shows typical list-only planning rates — confirm lane availability and final price before purchase. Live, AI, and
-          hybrid columns sync to your live tier grid when the pricing API is connected.
+          Per-home rates by package (Dabble through Dominate). Checkout verifies your ring count and total before you pay. Beta promo codes may
+          apply a flat per-home rate on live callers.
         </p>
 
         <div className="rz-poster-value-row" aria-label="Why agents use this">
@@ -279,8 +328,9 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
             <div className="rz-poster-testimonial-cards">
               {sheetTestimonials.map((t) => (
                 <figure key={t.name} className="rz-poster-t-card">
-                  <div className="rz-poster-t-stars" aria-label="5 out of 5">
-                    {"★★★★★"}
+                  <div className="rz-poster-t-stars" aria-label={`${t.stars} out of 5`}>
+                    {"★".repeat(t.stars)}
+                    {"☆".repeat(5 - t.stars)}
                   </div>
                   <blockquote className="rz-poster-t-quote">{t.quote}</blockquote>
                   <figcaption className="rz-poster-t-cap">
@@ -296,32 +346,36 @@ export function PricingProductSheetSection({ showTestimonialStrip = true }: { sh
           </div>
         ) : null}
 
-        <footer className="rz-poster-footer-cta">
-          <div className="rz-poster-footer-left">
-            <span className="rz-poster-footer-icon" aria-hidden />
-            <div>
-              <p className="rz-poster-footer-tag">Ready to work a neighborhood?</p>
-              <p className="rz-poster-footer-copy">Launch a campaign with clear per-home pricing — we handle the outreach motion.</p>
+        <footer
+          className={`rz-poster-footer-cta${showFooterPitch ? "" : " rz-poster-footer-cta--compact"}`}
+        >
+          {showFooterPitch ? (
+            <div className="rz-poster-footer-left">
+              <span className="rz-poster-footer-icon" aria-hidden />
+              <div>
+                <p className="rz-poster-footer-tag">{POSTER_FOOTER_CTA}</p>
+                <p className="rz-poster-footer-copy">{POSTER_FOOTER_COPY}</p>
+              </div>
             </div>
-          </div>
+          ) : null}
           <div className="rz-poster-footer-mid">
-            <a href={`mailto:${contactEmail()}`} className="rz-poster-footer-link">
-              {contactEmail()}
+            <a href="https://circleprospecting.ai" className="rz-poster-footer-link">
+              circleprospecting.ai
             </a>
+            <a href={`mailto:${contactInboxEmail()}`} className="rz-poster-footer-link">
+              {contactInboxEmail()}
+            </a>
+            {phone ? (
+              <a href={`tel:${phone.replace(/\D/g, "")}`} className="rz-poster-footer-link">
+                {phone}
+              </a>
+            ) : null}
           </div>
           <div className="rz-poster-footer-right">
-            <Link to="/buy-leads" className="btn btn-primary rz-poster-footer-btn">
-              Start prospecting your area
-            </Link>
-            <p className="rz-poster-footer-tagline">Built for agents · Backed by data · Powered by people</p>
+            <StartProspectingButton className="rz-poster-footer-btn" />
+            <p className="rz-poster-footer-tagline">{POSTER_FOOTER_TAGLINE}</p>
           </div>
         </footer>
-
-        {loading && !error ? (
-          <p className="rz-poster-status" aria-live="polite">
-            Refreshing live rates…
-          </p>
-        ) : null}
       </div>
     </section>
   );

@@ -1,50 +1,47 @@
 import { useMemo, useEffect, useState, useRef, useCallback } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { SeoHead } from "../components/SeoHead";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
-import { ListingMap } from "../components/ListingMap";
 import { ListingAgentCard } from "../components/ListingAgentCard";
-import { ListingCampaignForm } from "../components/ListingCampaignForm";
 import { BuyLeadsSearch, type BuyLeadsSearchResult } from "../components/BuyLeadsSearch";
-import { buildDraftListingFromForm } from "../lib/listingDraft";
-import { contactEmail } from "../lib/siteConfig";
+import { buildDraftListingFromForm, resolveRealMls } from "../lib/listingDraft";
 import { isProductionSiteHost } from "../lib/siteUrl";
 import { apiBase, isApiBaseConfigured } from "../lib/apiBase";
 import {
   fetchLeadCount,
+  reportCheckoutCanceled,
   startLeadCheckout,
   type CampaignPropertyType,
 } from "../lib/leadsApi";
-import { PromoCodeField } from "../components/PromoCodeField";
 import {
-  LEAD_TIERS,
-  LEAD_PRICE_MATRIX,
-  checkoutServiceLines,
+  checkoutPricePerLeadUsd,
   defaultCheckoutServiceLine,
   isServiceLineHiddenDuringBeta,
   tierFromLeadCount,
   totalCentsForSelection,
   leadCountFitsTier,
   tierRowMeta,
-  pricePerLeadUsd,
   formatMoneyUsd,
   serviceLineLabel,
   minLeadsForStripeForTier,
   type LeadServiceLine,
   type LeadTierId,
 } from "../lib/leadPricing";
-import { loadUsGeoData, type UsGeoData, type UsCityRow, type UsCountyRow } from "../lib/usGeo";
+import { loadUsGeoData, type UsGeoData, type UsCityRow } from "../lib/usGeo";
 import { fetchOrderById } from "../lib/apiClient";
 import {
   applyListingFormValues,
   emptyListingFormValues,
   getLocalDemoOrder,
-  LISTING_RADIUS_ORDER,
-  formatListingDisplayAddress,
+  DEFAULT_LISTING_RADIUS_ID,
+  ORDER_LAYOUT_SHELL,
   listingAddressGeocodeQuery,
+  formatListingDisplayAddress,
   normalizeListingFormValues,
   listingFormValuesFromPayload,
+  hasValidMapCoords,
+  radiusRingLabel,
   radiusMilesFromId,
   parseListingLocation,
   resolveLocalListing,
@@ -56,8 +53,9 @@ import {
 import {
   agentFormFromInfo,
   agentRoleFromParam,
-  emptyAgentForm,
+  agentRoleFromPathSegment,
   campaignForAgentRole,
+  emptyAgentForm,
   getBuyerAgent,
   getSellerAgent,
   listingHasDualAgents,
@@ -67,7 +65,31 @@ import {
   type ListingAgentRole,
 } from "../lib/listingAgents";
 import { notifyError, notifyWarning } from "../lib/notify";
+import { trackFirstPromoterReferral } from "../lib/firstPromoter";
 import { radiusIdFromMiles } from "../lib/mapUtils";
+import { geocodeUSAddress } from "../lib/geocodeAddress";
+import { campaignPathFromListingPayload } from "../lib/ghlContactRole";
+import { buildMlsLeadsUrl, campaignPathFromLocationPathname, decodeMlsPathParam } from "../lib/mlsUrl";
+import { searchAgentPath } from "../lib/introAgentPhone";
+import { campaignTypeFromPathSegment, type MlsCampaignPathSegment } from "../lib/mlsCampaignPath";
+import {
+  resolveCampaignTypeForListing,
+  resolveLockedCampaignType,
+  type CampaignTypeLockSource,
+} from "../lib/listingCampaignType";
+import {
+  MultipleGhlMlsHitsError,
+  resolveListingByMls,
+  type GhlContactSearchHit,
+} from "../lib/buyLeadsSearchApi";
+import { buildListingCacheKey, readListingCache } from "../lib/listingCache";
+import { BuyListingPropertyCard } from "../components/BuyListingPropertyCard";
+import { BuyMapPreviewCard } from "../components/BuyMapPreviewCard";
+import { BuyCheckoutReview } from "../components/BuyCheckoutReview";
+import { BuyOrderTrustStrip } from "../components/BuyOrderTrustStrip";
+import { BuyOrderSummarySidebar } from "../components/BuyOrderSummarySidebar";
+import { BuyRadiusIconPicker } from "../components/BuyRadiusIconPicker";
+import { BuyServicePlanCards } from "../components/BuyServicePlanCards";
 import "./buy-leads.css";
 
 /** Defaults for lead-count API (optional filters UI removed — keeps checkout behavior stable). */
@@ -146,30 +168,6 @@ function coerceLeadCountDisplay(available: number, baseAvail: number): { availab
   return { available, base: baseAvail };
 }
 
-/** UI copy only: avoid showing very small match counts (checkout still uses the raw number). */
-function formatHomeownersMatchedDisplay(count: number): string {
-  if (!Number.isFinite(count) || count < 1) return "0";
-  if (count < 1000) return "1,000+";
-  return count.toLocaleString("en-US");
-}
-
-const CITY_SEARCH_MIN = 2;
-const CITY_SEARCH_MAX = 80;
-
-const BUY_NEXT_STEPS = [
-  "We pull homeowner records",
-  "Our system activates your campaign",
-  "Calls begin within 24 hours",
-  "You receive lead activity and reporting",
-] as const;
-
-const BUY_TRUST_ITEMS = [
-  "Your order is reviewed and verified",
-  "We confirm property and homeowner data",
-  "Campaigns typically begin within 24 hours",
-  "Track results and leads in your dashboard",
-] as const;
-
 function campaignTypeFromParam(raw: string | null): ListingCampaignType | null {
   if (raw === "just_listed" || raw === "just_sold") return raw;
   return null;
@@ -181,23 +179,44 @@ function firstUsPostcode(raw: string | undefined): string | null {
   return part || null;
 }
 
+type BuyLeadsLocationState = { preloadedListing?: ListingPayload };
+
 export function BuyLeads() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { mls: mlsPathParam, agentRole: agentPathParam } = useParams();
   const [sp] = useSearchParams();
   const canceled = sp.get("canceled");
-  const listingRef = sp.get("order") ?? sp.get("mls") ?? null;
-  const agentFromUrl = agentRoleFromParam(sp.get("agent"));
+  const mlsFromPath = decodeMlsPathParam(mlsPathParam);
+  const campaignPathFromUrl: MlsCampaignPathSegment | null = campaignPathFromLocationPathname(location.pathname);
+  const listingRef = sp.get("order") ?? (mlsFromPath || sp.get("mls") || null);
+  const pathAgentSegment = location.pathname.split("/").filter(Boolean)[0];
+  const agentFromPath = agentRoleFromPathSegment(agentPathParam) ?? agentRoleFromPathSegment(pathAgentSegment);
+  const agentFromUrl = agentFromPath ?? agentRoleFromParam(sp.get("agent"));
+  /** GHL contact from welcome email / tracked /go link (?c=). */
+  const ghlContactIdFromUrl = sp.get("c") ?? sp.get("contactId");
   const campaignFromUrl = campaignTypeFromParam(sp.get("campaign"));
+  /** Welcome-email MLS link — auto-load contact; no multi-match picker. */
+  const isWelcomeMlsLink = Boolean(mlsFromPath && (campaignPathFromUrl || agentFromPath || ghlContactIdFromUrl));
   const [listing, setListing] = useState<ListingPayload | null>(null);
   const [listingForm, setListingForm] = useState<ListingFormValues>(emptyListingFormValues);
   const [sellerAgentForm, setSellerAgentForm] = useState<ListingAgentFormValues>(emptyAgentForm);
   const [buyerAgentForm, setBuyerAgentForm] = useState<ListingAgentFormValues>(emptyAgentForm);
   const [orderingAgentRole, setOrderingAgentRole] = useState<ListingAgentRole | null>(() => agentFromUrl);
-  const [listingLoading, setListingLoading] = useState(true);
-  const [listingRadiusId, setListingRadiusId] = useState<RadiusId>("h1");
+  const [listingLoading, setListingLoading] = useState(() => Boolean(listingRef));
+  /** Multiple GHL contacts share this MLS — user must pick one in search. */
+  const [pendingMlsHits, setPendingMlsHits] = useState<GhlContactSearchHit[]>([]);
+  const [listingRadiusId, setListingRadiusId] = useState<RadiusId>(DEFAULT_LISTING_RADIUS_ID);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [campaignType, setCampaignType] = useState<CampaignPropertyType>(
-    () => campaignFromUrl ?? "just_listed"
+    () => campaignFromUrl ?? (campaignPathFromUrl ? campaignTypeFromPathSegment(campaignPathFromUrl) : "just_listed")
+  );
+  const [lockedCampaignType, setLockedCampaignType] = useState<ListingCampaignType | null>(
+    () => campaignFromUrl ?? (campaignPathFromUrl ? campaignTypeFromPathSegment(campaignPathFromUrl) : null)
+  );
+  const [campaignLockSource, setCampaignLockSource] = useState<CampaignTypeLockSource | null>(
+    () => (campaignFromUrl ? "url" : null)
   );
   const [serviceLine, setServiceLine] = useState<LeadServiceLine>(() => defaultCheckoutServiceLine());
   /** Explicit plan row (Dabble … Scale); click a row in any pricing table to set service + plan. */
@@ -205,34 +224,38 @@ export function BuyLeads() {
   const [promoInput, setPromoInput] = useState("");
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
   const canceledToastShown = useRef(false);
   /** Set when /api returns HTML (e.g. Firebase Hosting without API proxy). */
   const [apiBackendHint, setApiBackendHint] = useState<string | null>(null);
   const [geo, setGeo] = useState<UsGeoData | null>(null);
-  const [geoError, setGeoError] = useState<string | null>(null);
   /** Row key from bundled US cities list (`city|county|ST`). */
   const [cityRowKey, setCityRowKey] = useState("");
-  /** County key `County|ST` — stays in sync when you pick a city from search. */
+  /** County key `County|ST` — used for lead-count API fallback when no listing is loaded. */
   const [countyKey, setCountyKey] = useState("");
-  /** City field: typeahead open + query (full list is huge — search instead of a giant native select). */
-  const [cityPickerOpen, setCityPickerOpen] = useState(false);
-  const [cityQuery, setCityQuery] = useState("");
-  const [countyPickerOpen, setCountyPickerOpen] = useState(false);
-  const [countyQuery, setCountyQuery] = useState("");
   const [zip, setZip] = useState("34698");
   const [radius, setRadius] = useState("1.0");
   const [requestedLeads, setRequestedLeads] = useState(500);
   const [estimatedAvailable, setEstimatedAvailable] = useState(0);
-  const [mapLat, setMapLat] = useState(28.0356);
-  const [mapLng, setMapLng] = useState(-82.7743);
+  const [mapLat, setMapLat] = useState(0);
+  const [mapLng, setMapLng] = useState(0);
   const [locatingMap, setLocatingMap] = useState(false);
   const [mapNotice, setMapNotice] = useState<string | null>(null);
-  const [countLoading, setCountLoading] = useState(false);
   /** When true, ZIP auto-fill is skipped (user has entered a non-empty ZIP). Clear the field to allow auto-fill again. */
   const zipManualLockRef = useRef(false);
+  /** Ignore out-of-order geocode responses (older request failed after a newer one succeeded). */
+  const geocodeGenRef = useRef(0);
+  const mapCoordsRef = useRef({ lat: mapLat, lng: mapLng });
+  /** Address snapshot when listing loaded from GHL/API. */
+  const loadedListingAddressKeyRef = useRef<string | null>(null);
+  /** Address we last successfully geocoded — only skip re-geocode when this matches. */
+  const geocodedAddressKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    mapCoordsRef.current = { lat: mapLat, lng: mapLng };
+  }, [mapLat, mapLng]);
 
   const selectedCityRow = useMemo(() => geo?.citiesFlat.find((r) => r.k === cityRowKey), [geo, cityRowKey]);
-  const selectedCountyRow = useMemo(() => geo?.counties.find((c) => c.key === countyKey), [geo, countyKey]);
   const city = selectedCityRow?.city ?? "";
   const county = selectedCityRow?.county ?? "";
   /** Used only for geocoding / Nominatim — not shown as a separate form field. */
@@ -247,13 +270,18 @@ export function BuyLeads() {
     () => minLeadsForStripeForTier(serviceLine, selectedTier, appliedPromoCode),
     [serviceLine, selectedTier, appliedPromoCode]
   );
-  const visibleServiceLines = useMemo(() => checkoutServiceLines(), []);
-
   useEffect(() => {
     if (isServiceLineHiddenDuringBeta(serviceLine)) {
       setServiceLine(defaultCheckoutServiceLine());
     }
   }, [serviceLine]);
+
+  useEffect(() => {
+    if (!campaignFromUrl) return;
+    setLockedCampaignType(campaignFromUrl);
+    setCampaignLockSource("url");
+    setCampaignType(campaignFromUrl);
+  }, [campaignFromUrl]);
 
   const handlePromoApply = useCallback(
     (code: string | null) => {
@@ -271,8 +299,39 @@ export function BuyLeads() {
       ? `${selectedTierMeta.minLeads.toLocaleString()}+`
       : `${selectedTierMeta.minLeads.toLocaleString()}–${selectedTierMeta.maxLeads.toLocaleString()}`;
 
-  const selectedListingRing = listing ? listing.radii[listingRadiusId] : null;
-  const listingHomesCap = selectedListingRing ? Math.max(1, selectedListingRing.count) : null;
+  /** Demo shell only on bare /buy-leads — never while an MLS/order link is resolving (avoids wrong address/MLS flash). */
+  const pendingListing = useMemo((): ListingPayload | null => {
+    if (listing || !listingRef) return null;
+    const mls = (mlsFromPath || listingRef).trim();
+    return {
+      id: mls.toLowerCase() || "pending",
+      internalId: 0,
+      mls: mls || "—",
+      address: "",
+      cityStateZip: "",
+      county: "",
+      listPrice: "",
+      agentName: "",
+      email: "",
+      phone: "",
+      brokerage: "",
+      listingPhotoUrl: null,
+      lat: 0,
+      lng: 0,
+      zip: "",
+      campaignType: "just_listed",
+      radii: ORDER_LAYOUT_SHELL.radii,
+    };
+  }, [listing, listingRef, mlsFromPath]);
+  const displayListing = listing ?? pendingListing ?? ORDER_LAYOUT_SHELL;
+  const listingReady = Boolean(listing);
+  const listingResolving = listingLoading || searchBusy;
+  const showListingLoading = listingResolving && !listingReady;
+  const isEntrySearch = !listingRef;
+  /** Entry /buy-leads = search only until a listing loads; MLS pay links always show checkout UI. */
+  const showCheckoutFlow = Boolean(listingRef) || listingReady;
+  const selectedListingRing = displayListing.radii[listingRadiusId];
+  const listingHomesCap = Math.max(1, selectedListingRing.count);
 
   const homesCap = useMemo(() => {
     if (listingHomesCap != null) return listingHomesCap;
@@ -305,10 +364,46 @@ export function BuyLeads() {
 
   const dualAgents = listingHasDualAgents(listing);
 
+  const pickCampaignType = useCallback(
+    (next: ListingCampaignType) => {
+      if (lockedCampaignType && lockedCampaignType !== next) return;
+      setCampaignType(next);
+      setListing((l) => (l ? { ...l, campaignType: next } : l));
+    },
+    [lockedCampaignType]
+  );
+
+  const syncCampaignFromListing = useCallback(
+    (normalized: ListingPayload, orderRole?: ListingAgentRole | null) => {
+      const { lock, source } = resolveLockedCampaignType({
+        campaignFromUrl,
+        listingType: normalized.listingType,
+      });
+      setLockedCampaignType(lock);
+      setCampaignLockSource(source);
+      if (lock) {
+        setCampaignType(lock);
+        return;
+      }
+      const role =
+        orderRole ??
+        orderingAgentRole ??
+        agentFromUrl ??
+        (listingHasDualAgents(normalized) ? "seller" : null);
+      setCampaignType(
+        resolveCampaignTypeForListing({
+          campaignPath: campaignPathFromUrl,
+          agentRole: role,
+          fallback: "just_listed",
+        })
+      );
+    },
+    [campaignFromUrl, campaignPathFromUrl, agentFromUrl, orderingAgentRole]
+  );
+
   const activateAgentRole = useCallback(
     (role: ListingAgentRole) => {
       setOrderingAgentRole(role);
-      setCampaignType(campaignForAgentRole(role));
       const agent = role === "seller" ? sellerAgentForm : buyerAgentForm;
       setEmail(agent.email.trim());
       setPhone(agent.phone.trim());
@@ -319,8 +414,11 @@ export function BuyLeads() {
         phone: agent.phone,
         brokerage: agent.brokerage,
       }));
+      if (!lockedCampaignType) {
+        pickCampaignType(campaignForAgentRole(role));
+      }
     },
-    [sellerAgentForm, buyerAgentForm]
+    [sellerAgentForm, buyerAgentForm, lockedCampaignType, pickCampaignType]
   );
 
   const syncAgentFormsFromListing = useCallback((l: ListingPayload) => {
@@ -330,12 +428,57 @@ export function BuyLeads() {
     return normalized;
   }, []);
 
+  const geocodeListingAddress = useCallback(async (form: ListingFormValues) => {
+    const query = listingAddressGeocodeQuery(form);
+    if (query.length < 10) return;
+    const gen = ++geocodeGenRef.current;
+    setLocatingMap(true);
+    try {
+      const geo = await geocodeUSAddress(query, undefined, form);
+      if (gen !== geocodeGenRef.current) return;
+      if (!hasValidMapCoords(geo.lat, geo.lng)) {
+        setMapNotice("Could not find this address on the map. Check street, city, state, and ZIP.");
+        return;
+      }
+      setMapLat(geo.lat);
+      setMapLng(geo.lng);
+      setMapNotice(
+        geo.approximate
+          ? "Exact address not found — map centered on the ZIP code area. Refine the street if needed."
+          : null
+      );
+      geocodedAddressKeyRef.current = [form.streetAddress, form.city, form.stateCode, form.zip]
+        .map((s) => String(s).trim())
+        .join("|");
+      const countyRaw = geo.county;
+      setListingForm((prev) => {
+        setListing((l) =>
+          l ? applyListingFormValues(l, prev, { lat: geo.lat, lng: geo.lng, county: countyRaw || l.county }) : l
+        );
+        return prev;
+      });
+    } catch {
+      if (gen !== geocodeGenRef.current) return;
+      const addressKey = [form.streetAddress, form.city, form.stateCode, form.zip]
+        .map((s) => String(s).trim())
+        .join("|");
+      const unchangedSinceLoad = loadedListingAddressKeyRef.current === addressKey;
+      const { lat, lng } = mapCoordsRef.current;
+      if (!hasValidMapCoords(lat, lng) || !unchangedSinceLoad) {
+        setMapNotice("Map location could not be updated. Try refining the address.");
+      } else {
+        setMapNotice(null);
+      }
+    } finally {
+      if (gen === geocodeGenRef.current) setLocatingMap(false);
+    }
+  }, []);
+
   const applyListingFromPayload = useCallback(
     (
       l: ListingPayload,
       radiusId: RadiusId,
-      orderRole?: ListingAgentRole,
-      opts?: { fromSearch?: boolean }
+      orderRole?: ListingAgentRole
     ) => {
       const normalized = syncAgentFormsFromListing(l);
       const ring = normalized.radii[radiusId];
@@ -346,36 +489,58 @@ export function BuyLeads() {
       setEstimatedAvailable(count);
       setRadius(String(radiusMilesFromId(radiusId)));
       setZip(normalized.zip);
-      setMapLat(normalized.lat);
-      setMapLng(normalized.lng);
-      setListingForm(listingFormValuesFromPayload(normalized));
-      const fromSearch = opts?.fromSearch && !campaignFromUrl;
+      const formValues = listingFormValuesFromPayload(normalized);
+      setListingForm(formValues);
+      loadedListingAddressKeyRef.current = [
+        formValues.streetAddress,
+        formValues.city,
+        formValues.stateCode,
+        formValues.zip,
+      ]
+        .map((s) => String(s).trim())
+        .join("|");
+      const addressQuery = listingAddressGeocodeQuery(formValues);
+      if (hasValidMapCoords(normalized.lat, normalized.lng)) {
+        setMapLat(normalized.lat);
+        setMapLng(normalized.lng);
+        setMapNotice(null);
+        geocodedAddressKeyRef.current = [
+          formValues.streetAddress,
+          formValues.city,
+          formValues.stateCode,
+          formValues.zip,
+        ]
+          .map((s) => String(s).trim())
+          .join("|");
+      } else if (addressQuery.length >= 10) {
+        setMapNotice(null);
+        geocodedAddressKeyRef.current = null;
+        void geocodeListingAddress(formValues);
+      } else {
+        setMapLat(0);
+        setMapLng(0);
+      }
       if (listingHasDualAgents(normalized)) {
         const role =
           orderRole ??
           orderingAgentRole ??
           agentFromUrl ??
-          (fromSearch || campaignFromUrl === "just_sold" ? "seller" : "buyer");
+          "seller";
         const agent = role === "seller" ? getSellerAgent(normalized) : getBuyerAgent(normalized);
         setEmail(agent.email.trim());
         setPhone(agent.phone.trim());
-        setCampaignType(
-          campaignFromUrl ?? (fromSearch ? "just_sold" : campaignForAgentRole(role))
-        );
         setOrderingAgentRole(role);
       } else {
         setEmail(normalized.email.trim());
         setPhone(normalized.phone.trim());
-        if (campaignFromUrl) setCampaignType(campaignFromUrl);
-        else if (fromSearch) setCampaignType("just_sold");
-        else if (normalized.campaignType) setCampaignType(normalized.campaignType);
       }
       zipManualLockRef.current = true;
     },
-    [campaignFromUrl, agentFromUrl, orderingAgentRole, syncAgentFormsFromListing]
+    [agentFromUrl, orderingAgentRole, syncAgentFormsFromListing, geocodeListingAddress]
   );
 
   const onListingFormChange = useCallback(<K extends keyof ListingFormValues>(field: K, value: ListingFormValues[K]) => {
+    if (field === "mls" && mlsFromPath) return;
     setListingForm((prev) => {
       const next = { ...prev, [field]: value };
       const normalized =
@@ -387,18 +552,29 @@ export function BuyLeads() {
       if (field === "phone") setPhone(String(value).trim());
       return normalized;
     });
-  }, []);
+  }, [mlsFromPath]);
 
   const applyListingRadius = useCallback(
-    (
-      l: ListingPayload,
-      radiusId: RadiusId,
-      orderRole?: ListingAgentRole,
-      opts?: { fromSearch?: boolean }
-    ) => {
-      applyListingFromPayload(l, radiusId, orderRole, opts);
+    (l: ListingPayload, radiusId: RadiusId, orderRole?: ListingAgentRole) => {
+      applyListingFromPayload(l, radiusId, orderRole);
     },
     [applyListingFromPayload]
+  );
+
+  const handleRadiusPick = useCallback(
+    (radiusId: RadiusId) => {
+      if (listing) {
+        applyListingRadius(listing, radiusId);
+        return;
+      }
+      const ring = ORDER_LAYOUT_SHELL.radii[radiusId];
+      const count = Math.max(1, ring.count);
+      setListingRadiusId(radiusId);
+      setRequestedLeads(count);
+      setSelectedTier(tierFromLeadCount(count));
+      setRadius(String(radiusMilesFromId(radiusId)));
+    },
+    [applyListingRadius, listing]
   );
 
   const onSellerAgentChange = useCallback(
@@ -431,22 +607,16 @@ export function BuyLeads() {
     [sellerAgentForm, orderingAgentRole]
   );
 
-  const selectListingRingAndContinue = useCallback(
-    (l: ListingPayload, radiusId: RadiusId, role?: ListingAgentRole) => {
-      const orderRole = role ?? orderingAgentRole;
-      if (orderRole && listingHasDualAgents(l)) activateAgentRole(orderRole);
-      applyListingRadius(l, radiusId, orderRole ?? undefined);
-      document.getElementById("buy-service-step")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
-    [applyListingRadius, activateAgentRole, orderingAgentRole]
-  );
-
   const loadListingPayload = useCallback(
-    (data: ListingPayload, radiusId: RadiusId = "h1", opts?: { fromSearch?: boolean }) => {
+    (data: ListingPayload, radiusId: RadiusId = DEFAULT_LISTING_RADIUS_ID, opts?: { fromSearch?: boolean }) => {
       const normalized = normalizeListingAgents(data);
+      geocodeGenRef.current += 1;
+      geocodedAddressKeyRef.current = null;
+      setPendingMlsHits([]);
       setListing(normalized);
       setMapNotice(null);
-      applyListingRadius(normalized, radiusId, undefined, opts);
+      syncCampaignFromListing(normalized);
+      applyListingRadius(normalized, radiusId);
       setListingLoading(false);
       if (opts?.fromSearch) {
         requestAnimationFrame(() => {
@@ -454,129 +624,221 @@ export function BuyLeads() {
         });
       }
     },
-    [applyListingRadius]
+    [applyListingRadius, syncCampaignFromListing]
   );
+
+  const loadListingPayloadRef = useRef(loadListingPayload);
+  loadListingPayloadRef.current = loadListingPayload;
 
   const handleBuyLeadsSearch = useCallback(
     (result: BuyLeadsSearchResult) => {
       if (result.kind === "listing") {
-        loadListingPayload(result.listing, "h1", { fromSearch: true });
+        loadListingPayload(result.listing, DEFAULT_LISTING_RADIUS_ID, { fromSearch: true });
         return;
       }
       setMapLat(result.geo.lat);
       setMapLng(result.geo.lng);
       setMapNotice(null);
+      geocodedAddressKeyRef.current = [
+        result.form.streetAddress,
+        result.form.city,
+        result.form.stateCode,
+        result.form.zip,
+      ]
+        .map((s) => String(s).trim())
+        .join("|");
       const draft = buildDraftListingFromForm(result.form, result.geo, "just_sold");
-      loadListingPayload(draft, "h1", { fromSearch: true });
+      loadListingPayload(draft, DEFAULT_LISTING_RADIUS_ID, { fromSearch: true });
     },
     [loadListingPayload]
   );
+
+  const handleAgentPick = useCallback(
+    (hit: GhlContactSearchHit) => {
+      const phone = hit.phone?.trim();
+      if (!phone) {
+        notifyError("This contact has no phone on file — add a phone in GoHighLevel.");
+        return;
+      }
+      navigate(searchAgentPath(phone));
+    },
+    [navigate]
+  );
+
+  /** Legacy ?mls= or /mls/:id?agent= → canonical /listed|sold|buyer/mls/:id */
+  useEffect(() => {
+    const qMls = sp.get("mls")?.trim();
+    const role = agentRoleFromParam(sp.get("agent"));
+    if (qMls && !mlsFromPath) {
+      const qs = new URLSearchParams(sp);
+      qs.delete("mls");
+      qs.delete("agent");
+      const tail = qs.toString();
+      navigate(`${buildMlsLeadsUrl(qMls, role ? { agent: role } : undefined)}${tail ? `?${tail}` : ""}`, {
+        replace: true,
+      });
+      return;
+    }
+    if (mlsFromPath && role && !campaignPathFromUrl && !agentFromPath) {
+      const qs = new URLSearchParams(sp);
+      qs.delete("agent");
+      const tail = qs.toString();
+      navigate(`${buildMlsLeadsUrl(mlsFromPath, { agent: role })}${tail ? `?${tail}` : ""}`, { replace: true });
+    }
+  }, [sp, mlsFromPath, campaignPathFromUrl, agentFromPath, navigate]);
+
+  /** Canonical MLS URL — /listed|sold|buyer/mls/:id; strip ?c= tracking params once loaded. */
+  useEffect(() => {
+    if (!mlsFromPath || !listing) return;
+    const campaignPath =
+      campaignPathFromUrl ?? campaignPathFromListingPayload(listing) ?? undefined;
+    const qs = new URLSearchParams(sp);
+    const hadTracking = qs.has("c") || qs.has("contactId");
+    qs.delete("c");
+    qs.delete("contactId");
+    const needsCampaignPath = !campaignPathFromUrl && Boolean(campaignPath);
+    if (!hadTracking && !needsCampaignPath) return;
+    const tail = qs.toString();
+    const path = campaignPath
+      ? buildMlsLeadsUrl(mlsFromPath, { campaignPath })
+      : `/mls/${encodeURIComponent(mlsFromPath)}`;
+    navigate(`${path}${tail ? `?${tail}` : ""}`, { replace: true });
+  }, [mlsFromPath, campaignPathFromUrl, listing, navigate, sp]);
+
+  /** Listing passed via router state (Find listing / pick GHL contact) — avoid re-fetch race. */
+  useEffect(() => {
+    const preloaded = (location.state as BuyLeadsLocationState | null)?.preloadedListing;
+    if (!preloaded?.mls?.trim() || !listingRef) return;
+    if (preloaded.mls.trim().toUpperCase() !== listingRef.trim().toUpperCase()) return;
+    loadListingPayloadRef.current(preloaded, DEFAULT_LISTING_RADIUS_ID, { fromSearch: true });
+    const qs = new URLSearchParams(location.search);
+    qs.delete("c");
+    qs.delete("contactId");
+    const tail = qs.toString();
+    navigate(`${location.pathname}${tail ? `?${tail}` : ""}`, { replace: true, state: null });
+  }, [location.state, listingRef, navigate, location.pathname, location.search]);
 
   useEffect(() => {
     if (!listingRef) {
       setListingLoading(false);
       setListing(null);
+      setPendingMlsHits([]);
+      setListingForm(emptyListingFormValues());
+      setLockedCampaignType(campaignFromUrl);
+      setCampaignLockSource(campaignFromUrl ? "url" : null);
+      if (campaignFromUrl) setCampaignType(campaignFromUrl);
+      setMapLat(0);
+      setMapLng(0);
+      setMapNotice(null);
+      geocodedAddressKeyRef.current = null;
+      loadedListingAddressKeyRef.current = null;
       return;
     }
+
+    const preloaded = (location.state as BuyLeadsLocationState | null)?.preloadedListing;
+    if (
+      preloaded?.mls?.trim() &&
+      preloaded.mls.trim().toUpperCase() === listingRef.trim().toUpperCase()
+    ) {
+      return;
+    }
+
+    const cacheKey = buildListingCacheKey({
+      mls: listingRef,
+      contactId: ghlContactIdFromUrl,
+      agentRole: agentFromPath,
+    });
+    const cached = readListingCache(cacheKey);
+    if (cached) {
+      loadListingPayloadRef.current(cached, DEFAULT_LISTING_RADIUS_ID, { fromSearch: true });
+    }
+
     const ac = new AbortController();
-    setListingLoading(true);
+    if (!cached) {
+      setListing(null);
+      setPendingMlsHits([]);
+      setListingForm({
+        ...emptyListingFormValues(),
+        mls: (mlsFromPath || listingRef).trim(),
+      });
+      setMapLat(0);
+      setMapLng(0);
+      setMapNotice(null);
+      setListingLoading(true);
+    }
     void (async () => {
       try {
-        const data = await fetchOrderById(listingRef, ac.signal);
+        const data = await resolveListingByMls(listingRef, {
+          signal: ac.signal,
+          contactId: ghlContactIdFromUrl,
+          agentRole: agentFromPath,
+          autoPickMultiple: isWelcomeMlsLink,
+        });
         if (ac.signal.aborted) return;
-        loadListingPayload(data);
+        loadListingPayloadRef.current(data, DEFAULT_LISTING_RADIUS_ID, { fromSearch: true });
       } catch (e) {
         if (e instanceof Error && e.name === "AbortError") return;
-        const local = resolveLocalListing(listingRef) ?? getLocalDemoOrder(listingRef);
-        if (local) {
-          loadListingPayload(local);
-        } else {
-          setListing(null);
+        if (cached) return;
+        if (e instanceof MultipleGhlMlsHitsError && !isWelcomeMlsLink) {
+          setPendingMlsHits(e.hits);
           setListingLoading(false);
+          setMapNotice(null);
+          return;
+        }
+        try {
+          const data = await fetchOrderById(listingRef, ac.signal);
+          if (ac.signal.aborted) return;
+          loadListingPayloadRef.current(data);
+        } catch (e2) {
+          if (e2 instanceof Error && e2.name === "AbortError") return;
+          if (cached) return;
+          const local = resolveLocalListing(listingRef) ?? getLocalDemoOrder(listingRef);
+          if (local) {
+            loadListingPayloadRef.current(local);
+          } else {
+            setListing(null);
+            setListingLoading(false);
+            if (mlsFromPath) {
+              setListingForm((prev) => ({ ...prev, mls: mlsFromPath }));
+              setMapNotice("Search your MLS in GoHighLevel above, or enter the property address below.");
+            }
+          }
         }
       }
     })();
     return () => ac.abort();
-  }, [listingRef, loadListingPayload]);
+  }, [listingRef, mlsFromPath, campaignFromUrl, agentFromPath, ghlContactIdFromUrl, isWelcomeMlsLink]);
 
   useEffect(() => {
     if (!listing || !geo) return;
     syncListingGeo(listing, geo);
   }, [listing, geo, syncListingGeo]);
 
+  const listingAddressKey = useMemo(
+    () =>
+      [listingForm.streetAddress, listingForm.city, listingForm.stateCode, listingForm.zip]
+        .map((s) => String(s).trim())
+        .join("|"),
+    [listingForm.streetAddress, listingForm.city, listingForm.stateCode, listingForm.zip]
+  );
+
+  /** Re-geocode when the user edits the address — not on every load if GHL already gave coordinates. */
   useEffect(() => {
+    if (!listing) return;
     const query = listingAddressGeocodeQuery(listingForm);
     if (query.length < 10) return;
-    const ac = new AbortController();
+    if (
+      geocodedAddressKeyRef.current != null &&
+      geocodedAddressKeyRef.current === listingAddressKey
+    ) {
+      setMapNotice(null);
+      return;
+    }
     const t = window.setTimeout(() => {
-      void (async () => {
-        setLocatingMap(true);
-        try {
-          const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=us&q=${encodeURIComponent(query)}`;
-          const res = await fetch(url, { signal: ac.signal, headers: NOMINATIM_HEADERS });
-          if (!res.ok) throw new Error("geocode");
-          const rows = (await res.json()) as NominatimItem[];
-          const first = rows[0];
-          const lat = Number(first?.lat);
-          const lng = Number(first?.lon);
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-            setMapNotice("Could not find this address on the map. Check street, city, state, and ZIP.");
-            return;
-          }
-          setMapLat(lat);
-          setMapLng(lng);
-          setMapNotice(null);
-          const countyRaw = first?.address?.county?.replace(/\s+County$/i, "").trim();
-          setListingForm((prev) => {
-            setListing((l) =>
-              l ? applyListingFormValues(l, prev, { lat, lng, county: countyRaw || l.county }) : l
-            );
-            return prev;
-          });
-        } catch (e) {
-          if (e instanceof DOMException && e.name === "AbortError") return;
-          setMapNotice("Map location could not be updated. Try refining the address.");
-        } finally {
-          if (!ac.signal.aborted) setLocatingMap(false);
-        }
-      })();
-    }, 650);
-    return () => {
-      ac.abort();
-      window.clearTimeout(t);
-    };
-  }, [listingForm.streetAddress, listingForm.city, listingForm.stateCode, listingForm.zip]);
-
-  const citySearchHits = useMemo(() => {
-    if (!geo || cityQuery.trim().length < CITY_SEARCH_MIN) return [];
-    const q = cityQuery.trim().toLowerCase();
-    const hits: UsCityRow[] = [];
-    for (const r of geo.citiesFlat) {
-      if (r.label.toLowerCase().includes(q) || r.city.toLowerCase().includes(q)) {
-        hits.push(r);
-        if (hits.length >= CITY_SEARCH_MAX) break;
-      }
-    }
-    return hits;
-  }, [geo, cityQuery]);
-
-  const countySearchHits = useMemo(() => {
-    if (!geo || countyQuery.trim().length < CITY_SEARCH_MIN) return [];
-    const q = countyQuery.trim().toLowerCase();
-    const hits: UsCountyRow[] = [];
-    for (const c of geo.counties) {
-      if (
-        c.label.toLowerCase().includes(q) ||
-        c.county.toLowerCase().includes(q) ||
-        c.stateCode.toLowerCase().includes(q) ||
-        c.stateName.toLowerCase().includes(q)
-      ) {
-        hits.push(c);
-        if (hits.length >= CITY_SEARCH_MAX) break;
-      }
-    }
-    return hits;
-  }, [geo, countyQuery]);
+      void geocodeListingAddress(listingForm);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [listing, listingAddressKey, listingForm, geocodeListingAddress]);
 
   /** Cities in the selected county — used to keep city/county keys consistent when county changes. */
   const cityRowsInCounty = useMemo(() => {
@@ -594,8 +856,9 @@ export function BuyLeads() {
     return rows;
   }, [geo, countyKey]);
 
-  const applyLoadedGeo = useCallback((g: UsGeoData) => {
+  const applyLoadedGeo = useCallback((g: UsGeoData, pickAreaDefaults = true) => {
     setGeo(g);
+    if (!pickAreaDefaults) return;
     const defaultCountyKey = g.counties.some((c) => c.key === "Pinellas|FL") ? "Pinellas|FL" : g.counties[0]!.key;
     setCountyKey(defaultCountyKey);
     const meta = g.counties.find((c) => c.key === defaultCountyKey)!;
@@ -610,25 +873,40 @@ export function BuyLeads() {
   }, []);
 
   useEffect(() => {
+    if (listingRef) return;
     let ok = true;
-    setGeoError(null);
-    loadUsGeoData()
-      .then((g) => {
-        if (!ok) return;
-        applyLoadedGeo(g);
-      })
-      .catch((e) => {
-        if (!ok) return;
-        setGeoError(e instanceof Error ? e.message : "Could not load location data.");
-      });
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      loadUsGeoData()
+        .then((g) => {
+          if (!ok) return;
+          applyLoadedGeo(g, !mlsFromPath);
+        })
+        .catch(() => {
+          /* Geo bundle is only used for lead-count fallback when no listing is loaded. */
+        });
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      idleId = requestIdleCallback(load, { timeout: 4000 });
+    } else {
+      timeoutId = setTimeout(load, 300);
+    }
     return () => {
       ok = false;
+      if (idleId != null && typeof cancelIdleCallback !== "undefined") cancelIdleCallback(idleId);
+      if (timeoutId != null) clearTimeout(timeoutId);
     };
-  }, [applyLoadedGeo]);
+  }, [applyLoadedGeo, listingRef, mlsFromPath]);
 
   useEffect(() => {
     if (!canceled || canceledToastShown.current) return;
     canceledToastShown.current = true;
+    const sessionId = sessionStorage.getItem("cpai_checkout_session");
+    if (sessionId) {
+      sessionStorage.removeItem("cpai_checkout_session");
+      void reportCheckoutCanceled(sessionId).catch(() => {});
+    }
     notifyWarning("Checkout canceled — adjust your selection and try again.");
   }, [canceled]);
 
@@ -640,57 +918,12 @@ export function BuyLeads() {
   }, [geo, countyKey, cityRowsInCounty, cityRowKey]);
 
   useEffect(() => {
-    if (!cityPickerOpen && !countyPickerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (cityPickerOpen) {
-        setCityPickerOpen(false);
-        setCityQuery("");
-      }
-      if (countyPickerOpen) {
-        setCountyPickerOpen(false);
-        setCountyQuery("");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cityPickerOpen, countyPickerOpen]);
-
-  function pickCityRowFromSearch(row: UsCityRow) {
-    zipManualLockRef.current = false;
-    setCityRowKey(row.k);
-    setCountyKey(`${row.county}|${row.stateCode}`);
-    setCityPickerOpen(false);
-    setCityQuery("");
-    setCountyPickerOpen(false);
-    setCountyQuery("");
-  }
-
-  function pickCounty(k: string) {
-    zipManualLockRef.current = false;
-    setCityPickerOpen(false);
-    setCityQuery("");
-    setCountyPickerOpen(false);
-    setCountyQuery("");
-    setCountyKey(k);
-    const meta = geo?.counties.find((c) => c.key === k);
-    if (!meta || !geo) return;
-    const firstName = geo.cities[k]?.[0];
-    const row = firstName
-      ? geo.citiesFlat.find(
-          (r) => r.county === meta.county && r.stateCode === meta.stateCode && r.city === firstName
-        )
-      : undefined;
-    if (row) setCityRowKey(row.k);
-  }
-
-  useEffect(() => {
-    if (listing) return;
+    if (listing || mlsFromPath) return;
     const t = window.setTimeout(() => {
       void geocodeTargetArea();
     }, 500);
     return () => window.clearTimeout(t);
-  }, [city, county, zip, stateName, listing]);
+  }, [city, county, zip, stateName, listing, mlsFromPath]);
 
   useEffect(() => {
     if (city.trim().length < 2 || county.trim().length < 2 || !stateName) return;
@@ -728,14 +961,40 @@ export function BuyLeads() {
   const mapPreviewRadius = listing ? listingRadiusId : radiusIdFromMiles(Number.parseFloat(radius));
   const mapPreviewRadiusMiles = listing ? radiusMilesFromId(listingRadiusId) : Number.parseFloat(radius) || 1;
   const mapPreviewRadiusLabel = listing
-    ? (selectedListingRing?.label ?? `${mapPreviewRadiusMiles} mi`)
+    ? (selectedListingRing
+        ? radiusRingLabel(listingRadiusId, selectedListingRing.label)
+        : `${mapPreviewRadiusMiles} mi`)
     : `${radius} mi`;
-  const mapPreviewLat = mapLat;
-  const mapPreviewLng = mapLng;
+  const mapPreviewLat = hasValidMapCoords(mapLat, mapLng)
+    ? mapLat
+    : listing && hasValidMapCoords(displayListing.lat, displayListing.lng)
+      ? displayListing.lat
+      : !listingRef && hasValidMapCoords(displayListing.lat, displayListing.lng)
+        ? displayListing.lat
+        : mapLat;
+  const mapPreviewLng = hasValidMapCoords(mapLat, mapLng)
+    ? mapLng
+    : listing && hasValidMapCoords(displayListing.lat, displayListing.lng)
+      ? displayListing.lng
+      : !listingRef && hasValidMapCoords(displayListing.lat, displayListing.lng)
+        ? displayListing.lng
+        : mapLng;
+  const mapHasCoords = showListingLoading ? false : hasValidMapCoords(mapPreviewLat, mapPreviewLng);
+  const mapPreviewLocating = showListingLoading || locatingMap;
+
+  const searchPrefillAddress = useMemo(() => {
+    if (!listing) return "";
+    return formatListingDisplayAddress(listingForm);
+  }, [listing, listingForm]);
+
+  const scrollToCheckout = useCallback(() => {
+    document.getElementById("buy-checkout-step")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const campaignDisplayLabel = campaignType === "just_listed" ? "Just listed" : "Just sold";
 
   async function refreshLeadCount(opts?: { quiet?: boolean; radiusOverride?: string }) {
     const radiusForRequest = opts?.radiusOverride ?? radius;
-    setCountLoading(true);
     try {
       const result = await fetchLeadCount({
         city,
@@ -771,8 +1030,6 @@ export function BuyLeads() {
         setSelectedTier(tierFromLeadCount(next));
         return next;
       });
-    } finally {
-      setCountLoading(false);
     }
   }
 
@@ -803,6 +1060,10 @@ export function BuyLeads() {
   }
 
   async function onBuy() {
+    if (!listingReady) {
+      notifyError("Find your listing above before checkout.");
+      return;
+    }
     if (!email.includes("@")) {
       notifyError("Enter a valid email.");
       return;
@@ -828,7 +1089,7 @@ export function BuyLeads() {
       const checkoutCity = (listingForm.city || listingLoc?.city || city).trim();
       const checkoutCounty = (listing?.county || county).trim();
       const checkoutZip = (listingForm.zip || listing?.zip || zip).trim();
-      const { url } = await startLeadCheckout(
+      const { url, sessionId } = await startLeadCheckout(
         serviceLine,
         selectedTier,
         email.trim(),
@@ -842,8 +1103,15 @@ export function BuyLeads() {
           campaignType,
           agentRole: orderingAgentRole ?? undefined,
           promoCode: appliedPromoCode ?? undefined,
+          mls: resolveRealMls(mlsFromPath, listingForm.mls, listing?.mls),
+          listingAddress: formatListingDisplayAddress(listingForm) || listing?.address?.trim() || undefined,
+          agentName: listingForm.agentName.trim() || undefined,
+          brokerage: listingForm.brokerage.trim() || undefined,
+          radiusLabel: radiusRingLabel(listingRadiusId, selectedListingRing.label),
         }
       );
+      if (sessionId) sessionStorage.setItem("cpai_checkout_session", sessionId);
+      trackFirstPromoterReferral(email.trim());
       window.location.assign(url);
     } catch (e) {
       notifyError(checkoutFetchErrorMessage(e));
@@ -857,51 +1125,70 @@ export function BuyLeads() {
       <SeoHead
         title="Start prospecting your area | Circle Prospecting AI"
         description="Pick just listed or just sold, set your radius, choose data / AI / live lanes—we contact homeowners for you. Secure checkout and dashboard delivery."
-        path="/buy-leads"
+        path={
+          mlsFromPath
+            ? agentFromPath
+              ? `/${agentFromPath}/mls/${encodeURIComponent(mlsFromPath)}`
+              : `/mls/${encodeURIComponent(mlsFromPath)}`
+            : "/buy-leads"
+        }
       />
       <div className="app-shell rz-shell rz-app">
         <SiteHeader />
-        <main id="main-content" tabIndex={-1} className="page-space page-space--tight rzInterior buy-page">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={`page-space page-space--tight rzInterior buy-page${listing ? " buy-page--has-listing" : ""}`}
+        >
           <div className="container buy-wrap">
+            {showCheckoutFlow ? (
             <div className="buy-stepper">
-              {["Campaign type", "Neighborhood & radius", "Homes & service", "Checkout"].map((step, idx) => (
-                <div key={step} className={`buy-step ${idx <= 2 ? "is-active" : ""}`}>
+              {(
+                [
+                  ["Campaign type", "Property & area"],
+                  ["Choose your audience", "How many homeowners"],
+                  ["Homes & service", "Choose your plan"],
+                  ["Checkout", "Review & pay"],
+                ] as const
+              ).map(([title, sub], idx) => (
+                <div key={title} className={`buy-step ${idx <= 2 ? "is-active" : ""}`}>
                   <span className="buy-step-n">{idx + 1}</span>
-                  <span className="buy-step-t">{step}</span>
+                  <span className="buy-step-t">
+                    <strong>{title}</strong>
+                    <span className="buy-step-sub">{sub}</span>
+                  </span>
                 </div>
               ))}
             </div>
+            ) : null}
 
-            <header className="page-hero" style={{ marginBottom: "1rem" }}>
+            <header className="page-hero buy-page-hero">
               <p className="page-breadcrumb">
                 <Link to="/">Home</Link> / Start prospecting
               </p>
               <h1 className="page-h1 page-h1--gradient">
-                {listing ? "Prospect homeowners around your listing" : "We’ll contact your market for you"}
+                {isEntrySearch && !listingReady
+                  ? "Let's find your latest listing or sale"
+                  : "Prospect homeowners around your listing"}
               </h1>
-              <p className="page-lead" style={{ maxWidth: 720 }}>
+              <p className="page-lead">
                 {listing ? (
                   <>
                     Your <strong>{campaignType === "just_listed" ? "just listed" : "just sold"}</strong> campaign is pre-filled from this
-                    property—pick a target ring, then your service lane. Checkout uses the agent contact on file.
+                    property—pick a target ring, choose your service, then checkout securely.
+                  </>
+                ) : isEntrySearch ? (
+                  <>
+                    Start with your <strong>agent email or phone</strong> — or switch to <strong>MLS #</strong> / property address. After you
+                    pick an agent, we&apos;ll show their latest listing, sold, and buyer-side closes.
                   </>
                 ) : (
                   <>
-                    Choose <strong>just listed</strong> or <strong>just sold</strong>, draw the radius, then pick your lane—<strong>data</strong>,{" "}
-                    <strong>AI outreach</strong>, or <strong>live callers</strong>. Your budget is how many homeowners we reach; checkout is secure.
-                    Status and handoffs live in your{" "}
-                    <Link to="/dashboard" style={{ color: "var(--accent-cyan)", fontWeight: 600 }}>
-                      dashboard
-                    </Link>
-                    .
+                    Search your <strong>MLS #</strong> or property address above, then pick a target ring and service plan. Checkout uses the agent
+                    contact on file.
                   </>
                 )}
               </p>
-              <div className="buy-hero-pills" aria-label="Promotion checkout highlights">
-                <span className="buy-hero-pill">We call &amp; text for you</span>
-                <span className="buy-hero-pill">AI + live caller lanes</span>
-                <span className="buy-hero-pill">Per-homeowner pricing</span>
-              </div>
             </header>
             {import.meta.env.PROD && !isApiBaseConfigured() ? (
               <div className="cp-alert cp-alert--error" role="alert">
@@ -921,48 +1208,106 @@ export function BuyLeads() {
               </div>
             ) : null}
 
-            <BuyLeadsSearch disabled={listingLoading || busy} onResult={handleBuyLeadsSearch} />
+            <BuyLeadsSearch
+              disabled={listingResolving || busy}
+              initialMls={mlsFromPath || sp.get("mls") || ""}
+              prefillAddress={searchPrefillAddress}
+              searchAgentRole={agentFromUrl}
+              contactIdFromUrl={ghlContactIdFromUrl}
+              pendingListingHits={isWelcomeMlsLink ? [] : pendingMlsHits}
+              pendingListingHitsMessage={
+                !isWelcomeMlsLink && pendingMlsHits.length
+                  ? `${pendingMlsHits.length} matches for MLS ${mlsFromPath || listingRef} — select one below.`
+                  : undefined
+              }
+              onAgentPick={isEntrySearch ? handleAgentPick : undefined}
+              agentHint={
+                isEntrySearch
+                  ? "Search by email or phone — pick a match to see latest listing, sold, and buyer-side closes."
+                  : undefined
+              }
+              onResult={handleBuyLeadsSearch}
+              onBusyChange={setSearchBusy}
+            />
 
-            <section className="buy-grid">
-              <div className="section-surface buy-card buy-card--filters">
-                <h2 className="premium-h2">
-                  {listing ? "Select your target area" : "Step 1: Your listing & target area"}
-                </h2>
-                {listingLoading ? (
-                  <p className="muted" role="status" style={{ marginBottom: "0.75rem" }}>
-                    Loading listing…
-                  </p>
-                ) : null}
-                {!listing && !listingLoading && listingRef ? (
-                  <p className="cp-alert cp-alert--warn" role="status" style={{ marginBottom: "0.85rem" }}>
-                    Could not load listing <code className="cp-kbd">{listingRef}</code>. Use search above or enter your
-                    details below.{" "}
-                    <Link to="/buy-leads?mls=TB8479039&amp;agent=buyer">Buyer demo</Link> ·{" "}
-                    <Link to="/buy-leads?mls=TB8445798&amp;agent=seller">Seller demo</Link>
-                  </p>
-                ) : null}
-                {!listing && !listingLoading && !listingRef ? (
-                  <p className="muted" role="status" style={{ marginBottom: "0.85rem", fontSize: "0.92rem" }}>
-                    Search above to load a listing, or fill in your property details below to start a campaign.
-                  </p>
-                ) : null}
-                {listing ? (
-                  <div id="buy-listing-loaded" className="buy-listing-head" style={{ marginBottom: "1rem" }}>
-                    <div className="buy-listing-head__ids">
-                      <span className="buy-listing-mls">{listingForm.mls || listing.mls}</span>
-                      <span className="buy-listing-sep" aria-hidden>
-                        |
-                      </span>
-                      <span className="buy-listing-addr">{formatListingDisplayAddress(listingForm)}</span>
-                    </div>
+            {showCheckoutFlow ? (
+              <>
+            {showListingLoading ? (
+              <p className="cp-loading-line" role="status" style={{ margin: "0.35rem 0 0" }}>
+                Loading listing…
+              </p>
+            ) : null}
+
+            <section
+              id="buy-listing-loaded"
+              className={`buy-mockup-hero${showListingLoading ? " buy-mockup-hero--loading" : ""}`}
+              aria-busy={showListingLoading}
+            >
+              {showListingLoading ? (
+                <div className="buy-mockup-hero__loading-overlay" role="presentation">
+                  <span className="buy-mockup-hero__loading-badge cp-loading-line">Loading listing…</span>
+                </div>
+              ) : null}
+                  <BuyListingPropertyCard
+                    listing={displayListing}
+                    form={listingForm}
+                    campaignType={campaignType}
+                    radiusId={listingRadiusId}
+                    radiusLabel={selectedListingRing.label}
+                    radiusCount={selectedListingRing.count}
+                    photoPending={showListingLoading}
+                  />
+                  <BuyMapPreviewCard
+                    listing={displayListing}
+                    form={listingForm}
+                    campaignType={campaignType}
+                    radiusId={listingRadiusId}
+                    selectedRing={selectedListingRing}
+                    mapHasCoords={mapHasCoords}
+                    mapLat={mapPreviewLat}
+                    mapLng={mapPreviewLng}
+                    mapPreviewRadius={mapPreviewRadius}
+                    mapPreviewRadiusMiles={mapPreviewRadiusMiles}
+                    mapPreviewRadiusLabel={mapPreviewRadiusLabel}
+                    locatingMap={mapPreviewLocating}
+                    mapNotice={mapNotice}
+                  />
+                  <div className="buy-mockup-hero__summary">
+                    <BuyOrderSummarySidebar
+                      listing={displayListing}
+                      form={listingForm}
+                      campaignLabel={campaignDisplayLabel}
+                      campaignType={campaignType}
+                      radiusId={listingRadiusId}
+                      radiusLabel={selectedListingRing.label}
+                      homes={requestedLeads}
+                      serviceLine={serviceLine}
+                      tierId={selectedTier}
+                      packageLabel={selectedTierMeta.packageLabel}
+                      promoCode={appliedPromoCode}
+                      totalCents={checkoutTotalCents}
+                      onContinue={scrollToCheckout}
+                      continueDisabled={!listingReady || !tierBandOk || checkoutTotalCents < 50}
+                      busy={busy}
+                      photoPending={showListingLoading}
+                    />
                   </div>
-                ) : null}
-                {dualAgents ? (
-                  <>
+                </section>
+
+                <BuyRadiusIconPicker
+                  listing={displayListing}
+                  selectedId={listingRadiusId}
+                  disabled={listingResolving || busy}
+                  onSelect={handleRadiusPick}
+                />
+
+                {listing && dualAgents ? (
+                  <section className="section-surface buy-card" style={{ marginTop: "1rem" }}>
+                    <h2 className="premium-h2" style={{ marginBottom: "0.5rem" }}>
+                      Who is placing this order?
+                    </h2>
                     <p className="muted" style={{ marginBottom: "0.85rem", fontSize: "0.92rem" }}>
-                      This listing has a <strong>seller agent</strong> and a <strong>buyer agent</strong>. Choose who is
-                      placing the order — seller orders use a <strong>Just sold</strong> campaign; buyer orders use{" "}
-                      <strong>Just listed</strong>.
+                      Seller orders use <strong>Just sold</strong>; buyer orders use <strong>Just listed</strong>.
                     </p>
                     <div className="buy-agent-grid">
                       <ListingAgentCard
@@ -974,7 +1319,7 @@ export function BuyLeads() {
                         onChange={onSellerAgentChange}
                         onSelectForOrder={() => activateAgentRole("seller")}
                         isActive={orderingAgentRole === "seller"}
-                        disabled={listingLoading}
+                        disabled={listingResolving}
                       />
                       <ListingAgentCard
                         role="buyer"
@@ -985,410 +1330,34 @@ export function BuyLeads() {
                         onChange={onBuyerAgentChange}
                         onSelectForOrder={() => activateAgentRole("buyer")}
                         isActive={orderingAgentRole === "buyer"}
-                        disabled={listingLoading}
+                        disabled={listingResolving}
                       />
                     </div>
-                    <h3 className="buy-subsection-h" style={{ marginTop: "1.15rem" }}>
-                      Property
-                    </h3>
-                    <p className="muted" style={{ marginBottom: "0.85rem", fontSize: "0.92rem" }}>
-                      Shared listing address — map preview updates when you edit the address.
-                    </p>
-                    <ListingCampaignForm
-                      values={listingForm}
-                      onChange={onListingFormChange}
-                      disabled={listingLoading}
-                      propertyOnly
-                    />
-                  </>
-                ) : (
-                  <>
-                    <p className="muted" style={{ marginBottom: "0.85rem", marginTop: listingLoading ? 0 : undefined }}>
-                      Campaign type for this run:
-                    </p>
-                    <div className="buy-campaign-toggle" role="radiogroup" aria-label="Listing or sale campaign">
-                      <button
-                        type="button"
-                        className={`buy-campaign-btn${campaignType === "just_listed" ? " is-selected" : ""}`}
-                        aria-pressed={campaignType === "just_listed"}
-                        onClick={() => setCampaignType("just_listed")}
-                      >
-                        <span className="buy-campaign-btn-title">Just listed</span>
-                        <span className="buy-campaign-btn-sub">New listing promotion</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`buy-campaign-btn${campaignType === "just_sold" ? " is-selected" : ""}`}
-                        aria-pressed={campaignType === "just_sold"}
-                        onClick={() => setCampaignType("just_sold")}
-                      >
-                        <span className="buy-campaign-btn-title">Just sold</span>
-                        <span className="buy-campaign-btn-sub">Sold promotion &amp; social proof</span>
-                      </button>
-                    </div>
-                    <h3 className="buy-subsection-h" style={{ marginTop: "1.15rem" }}>
-                      Listing &amp; agent
-                    </h3>
-                    <p className="muted" style={{ marginBottom: "0.85rem", fontSize: "0.92rem" }}>
-                      Confirm or edit your contact info and property address. The map preview updates when you change the address.
-                    </p>
-                    <ListingCampaignForm
-                      values={listingForm}
-                      onChange={onListingFormChange}
-                      disabled={listingLoading}
-                    />
-                  </>
-                )}
-                {listing ? (
-                  <>
-                    <p className="muted" style={{ margin: "1rem 0 0.75rem", fontSize: "0.92rem" }}>
-                      {dualAgents ? (
-                        <>
-                          Select <strong>seller</strong> or <strong>buyer</strong> above, pick a ring, then{" "}
-                          <strong>Order</strong> (seller = Just sold · buyer = Just listed).
-                        </>
-                      ) : (
-                        <>
-                          Pick a prospecting ring around this listing, then <strong>Order</strong> to choose your service
-                          and checkout.
-                        </>
-                      )}
-                    </p>
-                    <div className="buy-opp-table-wrap">
-                      <table className="buy-opp-table">
-                        <thead>
-                          <tr>
-                            <th scope="col" className="buy-opp-col-select">
-                              Select
-                            </th>
-                            <th scope="col">Area</th>
-                            <th scope="col">Homeowners to prospect</th>
-                            <th scope="col" className="buy-opp-col-action">
-                              Action
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {LISTING_RADIUS_ORDER.map((rid) => {
-                            const row = listing.radii[rid];
-                            const active = listingRadiusId === rid;
-                            return (
-                              <tr key={rid} className={active ? "is-selected" : ""}>
-                                <td className="buy-opp-col-select" data-label="Ring">
-                                  <input
-                                    type="radio"
-                                    name="listing-ring"
-                                    className="buy-opp-radio"
-                                    checked={active}
-                                    aria-label={`${row.label} — ${row.count.toLocaleString()} homeowners`}
-                                    onChange={() => applyListingRadius(listing, rid)}
-                                  />
-                                </td>
-                                <td data-label="Area">{row.label}</td>
-                                <td data-label="Homeowners">
-                                  <strong>{row.count.toLocaleString()}</strong> homeowners
-                                </td>
-                                <td className="buy-opp-col-action" data-label="Action">
-                                  {dualAgents ? (
-                                    <div className="buy-opp-order-pair">
-                                      <button
-                                        type="button"
-                                        className="btn btn-primary buy-opp-order buy-opp-order--seller"
-                                        onClick={() => selectListingRingAndContinue(listing, rid, "seller")}
-                                      >
-                                        Seller order
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn btn-ghost buy-opp-order buy-opp-order--buyer"
-                                        onClick={() => selectListingRingAndContinue(listing, rid, "buyer")}
-                                      >
-                                        Buyer order
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="btn btn-primary buy-opp-order"
-                                      onClick={() => selectListingRingAndContinue(listing, rid)}
-                                    >
-                                      Order
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
+                  </section>
                 ) : null}
-                {!listing ? (
-                  <>
-                <h3 className="buy-subsection-h">Target area (manual)</h3>
-                <p className="muted" style={{ marginBottom: "0.8rem", marginTop: "0.35rem" }}>
-                  Market center (city / county / ZIP) and how far out to reach homeowners.
-                </p>
-                {geoError ? (
-                  <div className="cp-alert cp-alert--warn" role="alert">
-                    <p style={{ margin: 0 }}>Location list failed to load: {geoError}</p>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ marginTop: "0.5rem" }}
-                      onClick={() => {
-                        setGeoError(null);
-                        void loadUsGeoData().then(applyLoadedGeo).catch((e) => {
-                          setGeoError(e instanceof Error ? e.message : "Could not load location data.");
-                        });
-                      }}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : !geo ? (
-                  <p className="muted" role="status">
-                    Loading U.S. city and county lists…
-                  </p>
-                ) : (
-                  <>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "0.75rem" }} className="buy-filters-3">
-                      <div className="cp-form-grid" style={{ position: "relative", zIndex: 4 }}>
-                        <span className="muted-label" id="buy-city-label">
-                          City
-                        </span>
-                        <input
-                          className="premium-input"
-                          id="buy-city-input"
-                          aria-labelledby="buy-city-label"
-                          aria-autocomplete="list"
-                          aria-expanded={cityPickerOpen}
-                          autoComplete="off"
-                          value={cityPickerOpen ? cityQuery : (selectedCityRow?.label ?? "")}
-                          onChange={(e) => {
-                            setCityQuery(e.target.value);
-                            setCityPickerOpen(true);
-                            setCountyPickerOpen(false);
-                            setCountyQuery("");
-                          }}
-                          onFocus={() => {
-                            setCityPickerOpen(true);
-                            setCountyPickerOpen(false);
-                            setCountyQuery("");
-                            setCityQuery((q) => (q.trim() ? q : (selectedCityRow?.city ?? "")));
-                          }}
-                          onBlur={() => {
-                            window.setTimeout(() => {
-                              setCityPickerOpen(false);
-                              setCityQuery("");
-                            }, 200);
-                          }}
-                          placeholder="Search city (e.g. Dunedin)…"
-                        />
-                        {cityPickerOpen && (
-                          <ul
-                            role="listbox"
-                            aria-label="City search results"
-                            className="buy-city-hitlist"
-                          >
-                            {cityQuery.trim().length < CITY_SEARCH_MIN ? (
-                              <li className="muted" style={{ padding: "0.5rem 0.65rem", fontSize: "0.86rem" }}>
-                                Type at least {CITY_SEARCH_MIN} letters…
-                              </li>
-                            ) : citySearchHits.length === 0 ? (
-                              <li className="muted" style={{ padding: "0.5rem 0.65rem", fontSize: "0.86rem" }}>
-                                No matches
-                              </li>
-                            ) : (
-                              citySearchHits.map((r) => (
-                                <li key={r.k} role="option">
-                                  <button
-                                    type="button"
-                                    className="buy-city-hit-btn"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => pickCityRowFromSearch(r)}
-                                  >
-                                    {r.label}
-                                  </button>
-                                </li>
-                              ))
-                            )}
-                          </ul>
-                        )}
-                      </div>
-                      <div className="cp-form-grid" style={{ position: "relative", zIndex: 3 }}>
-                        <span className="muted-label" id="buy-county-label">
-                          County
-                        </span>
-                        <input
-                          className="premium-input"
-                          id="buy-county-input"
-                          aria-labelledby="buy-county-label"
-                          aria-autocomplete="list"
-                          aria-expanded={countyPickerOpen}
-                          autoComplete="off"
-                          value={countyPickerOpen ? countyQuery : (selectedCountyRow?.label ?? "")}
-                          onChange={(e) => {
-                            setCountyQuery(e.target.value);
-                            setCountyPickerOpen(true);
-                            setCityPickerOpen(false);
-                            setCityQuery("");
-                          }}
-                          onFocus={() => {
-                            setCountyPickerOpen(true);
-                            setCityPickerOpen(false);
-                            setCityQuery("");
-                            setCountyQuery((q) => (q.trim() ? q : (selectedCountyRow?.county ?? "")));
-                          }}
-                          onBlur={() => {
-                            window.setTimeout(() => {
-                              setCountyPickerOpen(false);
-                              setCountyQuery("");
-                            }, 200);
-                          }}
-                          placeholder="Search county (e.g. Pinellas)…"
-                        />
-                        {countyPickerOpen && (
-                          <ul role="listbox" aria-label="County search results" className="buy-city-hitlist">
-                            {countyQuery.trim().length < CITY_SEARCH_MIN ? (
-                              <li className="muted" style={{ padding: "0.5rem 0.65rem", fontSize: "0.86rem" }}>
-                                Type at least {CITY_SEARCH_MIN} letters…
-                              </li>
-                            ) : countySearchHits.length === 0 ? (
-                              <li className="muted" style={{ padding: "0.5rem 0.65rem", fontSize: "0.86rem" }}>
-                                No matches
-                              </li>
-                            ) : (
-                              countySearchHits.map((c) => (
-                                <li key={c.key} role="option">
-                                  <button
-                                    type="button"
-                                    className="buy-city-hit-btn"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => pickCounty(c.key)}
-                                  >
-                                    {c.label}
-                                  </button>
-                                </li>
-                              ))
-                            )}
-                          </ul>
-                        )}
-                      </div>
-                      <label className="cp-form-grid">
-                        <span className="muted-label">ZIP</span>
-                        <input
-                          className="premium-input"
-                          value={zip}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            zipManualLockRef.current = v.trim().length > 0;
-                            setZip(v);
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </>
-                )}
-                <div style={{ marginTop: "1rem" }}>
-                  <span className="muted-label">Radius (miles from center)</span>
-                  <p className="muted" style={{ margin: "0.25rem 0 0.45rem", fontSize: "0.86rem" }}>
-                    How large a ring around your listing pin to include in this campaign.
-                  </p>
-                  <div className="buy-radius-track" role="radiogroup" aria-label="Radius in miles">
-                    {["0.25", "0.5", "1.0", "2.0", "3.0", "5.0"].map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        role="radio"
-                        aria-checked={radius === r}
-                        className={`buy-radius-chip${radius === r ? " is-active" : ""}`}
-                        onClick={() => {
-                          setRadius(r);
-                          void refreshLeadCount({ quiet: true, radiusOverride: r });
-                        }}
-                      >
-                        <span className="buy-radius-chip__val">{r}</span>
-                        <span className="buy-radius-chip__unit">mi</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                  </>
-                ) : null}
-              </div>
 
-              <div className="section-surface buy-card buy-card--map">
-                <h2 className="premium-h2">Map preview</h2>
-                <div className="cp-map-frame buy-map-preview">
-                  <ListingMap
-                    lat={mapPreviewLat}
-                    lng={mapPreviewLng}
-                    radius={mapPreviewRadius}
-                    radiusMiles={mapPreviewRadiusMiles}
-                    radiusLabel={`${mapPreviewRadiusLabel} radius`}
-                    height={340}
-                  />
-                </div>
-                <p className="muted" style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
-                  {campaignType === "just_listed" ? "Just listed" : "Just sold"}
-                  {listingForm.streetAddress.trim() || listing ? (
-                    <>
-                      {" "}
-                      · {listingForm.mls || listing?.mls || "—"} · {formatListingDisplayAddress(listingForm)}
-                      {selectedListingRing ? ` · ${selectedListingRing.label}` : ""} · {requestedLeads.toLocaleString()} homes
-                    </>
-                  ) : (
-                    <>
-                      {" "}
-                      · {city}, {county} ({zip}) · {radius} mi
-                    </>
-                  )}
-                  {locatingMap ? " · locating…" : ""}
-                </p>
-                {mapNotice ? <p className="muted" style={{ marginTop: "0.35rem", fontSize: "0.82rem" }}>{mapNotice}</p> : null}
-                <div className="buy-map-stats">
-                  <div>
-                    <span>Homeowners matched{countLoading && !listing ? " (updating…)" : ""}</span>
-                    <strong>
-                      {listing
-                        ? requestedLeads.toLocaleString()
-                        : formatHomeownersMatchedDisplay(estimatedAvailable)}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-            </section>
+            {!listingReady && listingRef && !listingLoading ? (
+              <p className="cp-alert cp-alert--warn" role="status" style={{ marginTop: "0.75rem" }}>
+                No GHL contact found for MLS <code className="cp-kbd">{listingRef}</code> — search again or confirm the MLS is on the
+                contact in GoHighLevel.
+              </p>
+            ) : null}
 
             <section
               id="buy-service-step"
               className="section-surface buy-card"
               style={{ marginTop: "1rem" }}
             >
-              <h2 className="premium-h2" style={{ marginBottom: "0.5rem" }}>Step 2: Homes to call — then your service</h2>
-              <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.92rem", maxWidth: 640 }}>
-                {listing ? (
-                  <>
-                    Your <strong>listing ring</strong> in Step 1 sets the maximum homeowners ({listingHomesCap?.toLocaleString() ?? "—"}
-                    {selectedListingRing ? ` · ${selectedListingRing.label}` : ""}). Choose how many to include in this order below — you can use fewer than the full ring (e.g. 500 of 789). Then pick your <strong>plan and product</strong>.
-                  </>
-                ) : (
-                  <>
-                    First choose <strong>how many homeowners</strong> we reach. Your plan band and per-home rate update automatically. During beta, checkout is <strong>Live Callers</strong> only — pick your tier below.
-                  </>
-                )}
-              </p>
-
-              <div className="buy-step2-block">
+              {/* Deferred — re-enable when home-count step returns */}
+              <div className="buy-home-count-step" hidden>
                 <h3 className="buy-step2-subhead">1 · How many homes should we call?</h3>
-                {listing && selectedListingRing && listingHomesCap != null ? (
+                {selectedListingRing ? (
                   <>
                     <div className="buy-listing-count-banner" role="status">
                       <span className="buy-listing-count-banner__n">{requestedLeads.toLocaleString()}</span>
                       <span className="buy-listing-count-banner__l">
-                        homeowners in order · {selectedListingRing.label} (up to {listingHomesCap.toLocaleString()}) · plan{" "}
-                        <strong>{selectedTierMeta.packageLabel}</strong>
+                        homeowners in order · {radiusRingLabel(listingRadiusId, selectedListingRing.label)} (up to{" "}
+                        {listingHomesCap.toLocaleString()}) · plan <strong>{selectedTierMeta.packageLabel}</strong>
                       </span>
                     </div>
                     <label className="cp-form-grid buy-home-exact" style={{ maxWidth: 360, marginTop: "1rem" }}>
@@ -1409,107 +1378,22 @@ export function BuyLeads() {
                           matching row below or change homes.{" · "}
                         </>
                       ) : null}
-                      <strong>{formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier, appliedPromoCode))}</strong> per home with{" "}
+                      <strong>{formatMoneyUsd(checkoutPricePerLeadUsd(serviceLine, selectedTier, appliedPromoCode))}</strong> per home with{" "}
                       <strong>{serviceLineLabel(serviceLine)}</strong> →{" "}
                       <strong className="gradient-text">{formatMoneyUsd(checkoutTotalCents / 100)}</strong> estimated total
                     </p>
                   </>
-                ) : (
-                  <>
-                <label className="cp-form-grid buy-home-exact" style={{ maxWidth: 360 }}>
-                  <span className="muted-label">Homes to call (updates plan automatically)</span>
-                  <input
-                    type="number"
-                    className="premium-input"
-                    min={1}
-                    max={homesCap}
-                    value={requestedLeads}
-                    onChange={(e) => applyHomeCount(Number.parseInt(e.target.value || "1", 10))}
-                  />
-                </label>
-                  </>
-                )}
+                ) : null}
               </div>
 
-              <div className="buy-step2-block" style={{ marginTop: "1.35rem" }}>
-                <h3 className="buy-step2-subhead">2 · Choose your plan (4 packages)</h3>
-                <p className="muted" style={{ margin: "0 0 0.75rem", fontSize: "0.88rem", maxWidth: 720 }}>
-                  <strong>Live Callers</strong> — <strong>Dabble</strong>, <strong>Starter</strong>, <strong>Growth</strong>, and <strong>Scale</strong> tiers. Rates are per homeowner at checkout.
-                </p>
-                <div className="buy-pricing-scroll">
-                <div className="buy-pricing-stack" role="group" aria-label="Plan packages by product">
-                  {visibleServiceLines.map((line) => {
-                    const serviceSelected = serviceLine === line.id;
-                    return (
-                      <div key={line.id} className={`buy-pricing-block${serviceSelected ? " is-selected" : ""}`}>
-                        <table className="buy-price-table">
-                          <thead>
-                            <tr>
-                              <th
-                                className="buy-price-banner buy-price-banner--hit"
-                                colSpan={4}
-                                style={{ background: line.headerBg, color: line.headerText }}
-                              >
-                                <button
-                                  type="button"
-                                  className="buy-price-title-btn"
-                                  style={{ color: line.headerText }}
-                                  onClick={() => setServiceLine(line.id)}
-                                  aria-pressed={serviceSelected}
-                                >
-                                  {line.label}
-                                </button>
-                              </th>
-                            </tr>
-                            <tr className="buy-price-colheads">
-                              <th scope="col" className="buy-price-col-select">
-                                Select
-                              </th>
-                              <th scope="col">Package</th>
-                              <th scope="col">Homes</th>
-                              <th scope="col">Per home</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {LEAD_TIERS.map((tier, idx) => {
-                              const planPick = serviceLine === line.id && selectedTier === tier.id;
-                              const rowBg = idx % 2 === 1 ? "rgba(15,23,42,0.04)" : "#fff";
-                              const price = appliedPromoCode
-                                ? pricePerLeadUsd(line.id, tier.id, appliedPromoCode)
-                                : LEAD_PRICE_MATRIX[line.id][idx];
-                              return (
-                                <tr
-                                  key={tier.id}
-                                  className={`buy-price-row${planPick ? " is-plan-selected" : ""}`}
-                                  onClick={() => pickServiceAndTier(line.id, tier.id)}
-                                  style={{
-                                    background: planPick ? line.rowAlt : rowBg,
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <td className="buy-price-col-select" onClick={(e) => e.stopPropagation()}>
-                                    <input
-                                      type="radio"
-                                      name="checkout-plan"
-                                      className="buy-opp-radio"
-                                      checked={planPick}
-                                      aria-label={`${line.label} · ${tier.packageLabel} · ${tier.homesLabel} homes`}
-                                      onChange={() => pickServiceAndTier(line.id, tier.id)}
-                                    />
-                                  </td>
-                                  <td>{tier.packageLabel}</td>
-                                  <td>{tier.homesLabel}</td>
-                                  <td>{formatMoneyUsd(price)}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  })}
-                </div>
-                </div>
+              <div className="buy-step2-block">
+                <BuyServicePlanCards
+                  serviceLine={serviceLine}
+                  selectedTier={selectedTier}
+                  requestedLeads={requestedLeads}
+                  promoCode={appliedPromoCode}
+                  onPick={pickServiceAndTier}
+                />
               </div>
 
               {checkoutTotalCents < 50 && (
@@ -1520,156 +1404,59 @@ export function BuyLeads() {
               )}
             </section>
 
-            <section className="section-surface buy-card buy-card--summary" style={{ marginTop: "1rem" }}>
-              <h2 className="premium-h2" style={{ marginBottom: "0.8rem" }}>Step 3: Review &amp; checkout</h2>
-              <p className="muted" style={{ margin: "0 0 0.85rem", fontSize: "0.9rem", maxWidth: 640 }}>
-                Confirm your selection — totals update when you change the ring or plan row above.
-              </p>
-              <div className="buy-summary-grid">
-                {listing ? (
-                  <div className="buy-summary-span2">
-                    <span>Listing</span>
-                    <strong>
-                      {listing.mls} · {listing.address}, {listing.cityStateZip}
-                    </strong>
-                  </div>
-                ) : null}
-                <div>
-                  <span>Campaign</span>
-                  <strong>{campaignType === "just_listed" ? "Just listed" : "Just sold"}</strong>
-                </div>
-                <div>
-                  <span>{listing ? "Target ring" : "Target area"}</span>
-                  <strong>
-                    {listing && selectedListingRing
-                      ? selectedListingRing.label
-                      : `${city}, ${county} ${zip} · ${radius} mi`}
-                  </strong>
-                </div>
-                <div>
-                  <span>Homes in order</span>
-                  <strong>{requestedLeads.toLocaleString()}</strong>
-                </div>
-                <div>
-                  <span>Service (product)</span>
-                  <strong>{serviceLineLabel(serviceLine)}</strong>
-                </div>
-                <div>
-                  <span>Plan band</span>
-                  <strong>
-                    {selectedTierMeta.packageLabel} · {formatMoneyUsd(pricePerLeadUsd(serviceLine, selectedTier, appliedPromoCode))}/home
-                  </strong>
-                </div>
-                {!listing ? (
-                  <>
-                    <div>
-                      <span>Homeowners matched</span>
-                      <strong>{formatHomeownersMatchedDisplay(estimatedAvailable)}</strong>
-                    </div>
-                  </>
-                ) : null}
-                <div>
-                  <span>Campaign total (est.)</span>
-                  <strong className="gradient-text">{formatMoneyUsd(checkoutTotalCents / 100)}</strong>
-                </div>
-              </div>
-              <div style={{ marginTop: "1rem", display: "grid", gap: "0.85rem" }}>
-                <div className="buy-listing-form__grid buy-listing-form__grid--2 buy-checkout-contact">
-                  <label className="cp-form-grid">
-                    <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-                      Email (delivery + receipt)
-                      {listing ? " — pre-filled from listing agent" : ""}
-                    </span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      autoComplete="email"
-                      className="premium-input"
-                      placeholder="you@yourbrokerage.com"
-                    />
-                  </label>
-                  <label className="cp-form-grid">
-                    <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-                      Mobile phone
-                      {listing ? " — pre-filled from listing agent" : ""}
-                    </span>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      autoComplete="tel"
-                      className="premium-input"
-                      placeholder="+1 (555) 000-0000"
-                    />
-                  </label>
-                </div>
-                <PromoCodeField
-                  value={promoInput}
-                  onChange={setPromoInput}
-                  onApply={handlePromoApply}
-                  appliedCode={appliedPromoCode}
-                  disabled={busy}
-                />
-                <p style={{ color: "var(--muted)", fontSize: "0.82rem", lineHeight: 1.5, margin: 0 }}>
-                  By continuing you agree to our{" "}
-                  <Link to="/terms" style={{ color: "var(--accent-cyan)" }}>
-                    Terms
-                  </Link>{" "}
-                  and{" "}
-                  <Link to="/privacy" style={{ color: "var(--accent-cyan)" }}>
-                    Privacy
-                  </Link>
-                  . You are responsible for compliant use of prospecting data (e.g. DNC / state rules).
-                </p>
-                <div className="buy-cta-row">
-                  <div className="buy-cta-meta">Secure checkout • Cancel anytime</div>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={busy || !tierBandOk || checkoutTotalCents < 50}
-                    onClick={onBuy}
-                  >
-                    {busy ? "Redirecting to Stripe…" : "Continue to checkout"}
-                  </button>
-                </div>
-              </div>
-              <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "1.1rem" }}>
-                Need help? {contactEmail()}
-              </p>
-            </section>
+            <BuyCheckoutReview
+              listing={displayListing}
+              form={listingForm}
+              campaignLabel={campaignDisplayLabel}
+              radiusId={listingRadiusId}
+              radiusLabel={selectedListingRing.label}
+              homes={requestedLeads}
+              serviceLine={serviceLine}
+              tierId={selectedTier}
+              packageLabel={selectedTierMeta.packageLabel}
+              promoCode={appliedPromoCode}
+              totalCents={checkoutTotalCents}
+              email={email}
+              phone={phone}
+              onFormChange={onListingFormChange}
+              onEmailChange={setEmail}
+              onPhoneChange={setPhone}
+              promoInput={promoInput}
+              onPromoInputChange={setPromoInput}
+              onPromoApply={handlePromoApply}
+              appliedPromoCode={appliedPromoCode}
+              lockedCampaignNote={
+                lockedCampaignType
+                  ? `Campaign locked to ${campaignDisplayLabel}${
+                      campaignLockSource === "ghl" ? " from GoHighLevel Listing Type" : " from this link"
+                    }.`
+                  : null
+              }
+              busy={busy}
+              listingReady={listingReady}
+              tierBandOk={tierBandOk}
+              onCheckout={onBuy}
+              disabled={listingResolving}
+            />
 
-            <section className="section-surface buy-next-bar" style={{ marginTop: "1rem" }}>
-              <h2 className="premium-h2" style={{ marginBottom: "0.75rem", fontSize: "1.05rem" }}>
-                What happens next?
-              </h2>
-              <ol className="buy-next-steps">
-                {BUY_NEXT_STEPS.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
-            </section>
-
-            <ul className="buy-trust-row" aria-label="Order assurances">
-              {BUY_TRUST_ITEMS.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+            <BuyOrderTrustStrip />
+              </>
+            ) : null}
 
             <style>{`
               .buy-campaign-toggle {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 0.75rem;
-                margin-bottom: 0.25rem;
+                gap: 0.5rem;
+                margin-bottom: 0.15rem;
               }
               @media (max-width: 560px) {
                 .buy-campaign-toggle { grid-template-columns: 1fr; }
               }
               .buy-campaign-btn {
                 text-align: left;
-                padding: 0.85rem 1rem;
-                border-radius: 14px;
+                padding: 0.6rem 0.85rem;
+                border-radius: 12px;
                 border: 2px solid rgba(15, 23, 42, 0.12);
                 background: #fff;
                 cursor: pointer;
@@ -1681,6 +1468,21 @@ export function BuyLeads() {
                 box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.18);
                 background: rgba(0, 122, 255, 0.07);
               }
+              .buy-campaign-btn:disabled {
+                opacity: 0.42;
+                cursor: not-allowed;
+                background: #f8fafc;
+              }
+              .buy-campaign-btn:disabled.is-selected {
+                opacity: 1;
+                cursor: default;
+              }
+              .buy-campaign-lock-hint {
+                margin: 0.35rem 0 0.5rem;
+                font-size: 0.82rem;
+                line-height: 1.4;
+                max-width: 42rem;
+              }
               .buy-campaign-btn:focus-visible {
                 outline: 2px solid rgba(0, 122, 255, 0.45);
                 outline-offset: 2px;
@@ -1688,19 +1490,19 @@ export function BuyLeads() {
               .buy-campaign-btn-title {
                 display: block;
                 font-weight: 800;
-                font-size: 1.05rem;
+                font-size: 0.95rem;
                 color: #0f172a;
               }
               .buy-campaign-btn-sub {
                 display: block;
-                font-size: 0.82rem;
+                font-size: 0.76rem;
                 color: #64748b;
-                margin-top: 0.28rem;
-                line-height: 1.35;
+                margin-top: 0.15rem;
+                line-height: 1.3;
               }
               .buy-subsection-h {
-                margin: 1.35rem 0 0;
-                font-size: 1rem;
+                margin: 0.65rem 0 0;
+                font-size: 0.95rem;
                 font-weight: 800;
                 color: #0f172a;
                 letter-spacing: -0.02em;
@@ -1709,23 +1511,23 @@ export function BuyLeads() {
               .buy-grid {
                 display: grid;
                 grid-template-columns: 1.2fr 0.8fr;
-                gap: 1.25rem;
-                margin-top: 0.25rem;
+                gap: 1rem;
+                margin-top: 0.15rem;
                 align-items: start;
               }
               .buy-card {
                 border-radius: 18px;
                 box-shadow: 0 16px 38px rgba(5, 12, 26, 0.07);
               }
-              .buy-card input,
-              .buy-card select,
-              .buy-card textarea {
+              .buy-card:not(.buy-search) input,
+              .buy-card:not(.buy-search) select,
+              .buy-card:not(.buy-search) textarea {
                 background: #fff !important;
                 color: #0f172a !important;
                 border: 1px solid rgba(15, 23, 42, 0.2) !important;
               }
-              .buy-card input::placeholder,
-              .buy-card textarea::placeholder {
+              .buy-card:not(.buy-search) input::placeholder,
+              .buy-card:not(.buy-search) textarea::placeholder {
                 color: #64748b !important;
               }
               .buy-city-hitlist {
@@ -1766,9 +1568,6 @@ export function BuyLeads() {
                 background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
                 align-self: start;
               }
-              .buy-map-preview {
-                min-height: 340px;
-              }
               .buy-map-preview .gradient-border {
                 width: 100%;
                 border-radius: 14px;
@@ -1777,10 +1576,10 @@ export function BuyLeads() {
                 background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
               }
               .buy-hero-pills {
-                margin-top: 0.85rem;
+                margin-top: 0.4rem;
                 display: flex;
                 flex-wrap: wrap;
-                gap: 0.5rem;
+                gap: 0.4rem;
               }
               .buy-hero-pill {
                 padding: 0.38rem 0.65rem;
@@ -1796,7 +1595,7 @@ export function BuyLeads() {
                 display: grid;
                 grid-template-columns: repeat(4,minmax(0,1fr));
                 gap: 0.6rem;
-                margin-bottom: 1rem;
+                margin-bottom: 0.6rem;
               }
               .buy-step {
                 border: 1px solid var(--border);
@@ -1850,7 +1649,7 @@ export function BuyLeads() {
               }
               .buy-pricing-stack {
                 display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
+                grid-template-columns: repeat(var(--buy-pricing-cols, 2), minmax(11.5rem, 1fr));
                 gap: 0.65rem;
                 align-items: stretch;
               }
@@ -1904,6 +1703,18 @@ export function BuyLeads() {
                 font-size: 0.76rem;
                 table-layout: fixed;
               }
+              .buy-price-table col.buy-price-col-select {
+                width: 2.35rem;
+              }
+              .buy-price-table col.buy-price-col-package {
+                width: 36%;
+              }
+              .buy-price-table col.buy-price-col-homes {
+                width: 24%;
+              }
+              .buy-price-table col.buy-price-col-rate {
+                width: auto;
+              }
               .buy-price-banner {
                 text-align: left;
                 padding: 0.65rem 0.9rem;
@@ -1936,12 +1747,17 @@ export function BuyLeads() {
                 padding: 0.38rem 0.4rem;
                 border-bottom: 1px solid rgba(15, 23, 42, 0.06);
                 color: #0f172a;
-                overflow-wrap: anywhere;
+              }
+              .buy-price-col-package,
+              .buy-price-col-homes,
+              .buy-price-table td:nth-child(4) {
+                white-space: nowrap;
+                word-break: keep-all;
+                overflow-wrap: normal;
               }
               .buy-price-table td:nth-child(4) {
                 text-align: right;
                 font-variant-numeric: tabular-nums;
-                white-space: nowrap;
               }
               .buy-price-table tbody tr:last-child td {
                 border-bottom: none;
@@ -2080,9 +1896,9 @@ export function BuyLeads() {
                 .buy-next-steps, .buy-trust-row { grid-template-columns: 1fr; }
               }
               .buy-listing-head {
-                margin-bottom: 1rem;
-                padding: 0.85rem 1rem;
-                border-radius: 14px;
+                margin-bottom: 0.5rem;
+                padding: 0.5rem 0.75rem;
+                border-radius: 12px;
                 border: 1px solid rgba(0, 122, 255, 0.18);
                 background: linear-gradient(135deg, rgba(0, 122, 255, 0.06), rgba(162, 215, 41, 0.05));
               }
@@ -2095,16 +1911,16 @@ export function BuyLeads() {
               }
               .buy-listing-mls {
                 font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-                font-size: 1.35rem;
+                font-size: 1.05rem;
                 font-weight: 800;
                 letter-spacing: 0.02em;
-                color: #38bdf8;
+                color: #0284c7;
               }
               .buy-listing-addr {
                 font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-                font-size: 1.05rem;
+                font-size: 0.88rem;
                 font-weight: 700;
-                color: #0ea5e9;
+                color: #0369a1;
               }
               .buy-listing-agent {
                 display: flex;
@@ -2212,7 +2028,6 @@ export function BuyLeads() {
               .buy-cta-meta { color: var(--muted); font-size: 0.85rem; }
               @media (max-width: 1100px) {
                 .buy-pricing-stack {
-                  grid-template-columns: repeat(2, minmax(0, 1fr));
                   gap: 0.75rem;
                 }
                 .buy-price-table { font-size: 0.8rem; }
@@ -2230,7 +2045,7 @@ export function BuyLeads() {
               }
               @media (max-width: 600px) {
                 .buy-pricing-stack {
-                  grid-template-columns: 1fr;
+                  grid-template-columns: 1fr !important;
                   gap: 0.85rem;
                 }
                 .buy-price-table { font-size: 0.88rem; }

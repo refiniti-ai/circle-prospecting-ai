@@ -12,6 +12,8 @@ export type PurchaseNotificationRecord = {
   customerEmail: string | null;
   /** Last 10 digits from checkout metadata; helps identity login without Stripe round-trips. */
   customerPhoneDigits?: string | null;
+  /** Display phone from checkout metadata when available. */
+  customerPhone?: string | null;
   amountTotalCents: number | null;
   currency: string | null;
   lineItems: string[];
@@ -20,6 +22,12 @@ export type PurchaseNotificationRecord = {
   leadTier?: string | null;
   requestedLeads?: number | null;
   targetingSummary?: string | null;
+  mls?: string | null;
+  listingAddress?: string | null;
+  agentName?: string | null;
+  brokerage?: string | null;
+  campaignType?: string | null;
+  radiusLabel?: string | null;
   /** Admin: neighborhood / lead-pack fulfillment tracked in dashboard */
   leadWorkStatus?: LeadWorkStatus | null;
   /** Set after customer order receipt email is successfully handed to GHL/Resend/SMTP */
@@ -70,6 +78,7 @@ function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord &
     checkoutType: record.checkoutType,
     customerEmail: record.customerEmail,
     customerPhoneDigits: record.customerPhoneDigits ?? null,
+    customerPhone: record.customerPhone ?? null,
     amountTotalCents: record.amountTotalCents,
     currency: record.currency,
     lineItems: record.lineItems,
@@ -77,6 +86,12 @@ function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord &
     leadTier: record.leadTier ?? null,
     requestedLeads: record.requestedLeads ?? null,
     targetingSummary: record.targetingSummary ?? null,
+    mls: record.mls ?? null,
+    listingAddress: record.listingAddress ?? null,
+    agentName: record.agentName ?? null,
+    brokerage: record.brokerage ?? null,
+    campaignType: record.campaignType ?? null,
+    radiusLabel: record.radiusLabel ?? null,
   };
   let out: Record<string, unknown> =
     record.leadWorkStatus === "pending" || record.leadWorkStatus === "completed"
@@ -143,6 +158,7 @@ function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] 
     checkoutType: raw.checkoutType ?? "unknown",
     customerEmail: raw.customerEmail ?? null,
     customerPhoneDigits: raw.customerPhoneDigits ?? null,
+    customerPhone: raw.customerPhone ?? null,
     amountTotalCents: raw.amountTotalCents ?? null,
     currency: raw.currency ?? null,
     lineItems: raw.lineItems ?? [],
@@ -150,6 +166,12 @@ function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] 
     leadTier: raw.leadTier ?? null,
     requestedLeads: raw.requestedLeads ?? null,
     targetingSummary: raw.targetingSummary ?? null,
+    mls: raw.mls ?? null,
+    listingAddress: raw.listingAddress ?? null,
+    agentName: raw.agentName ?? null,
+    brokerage: raw.brokerage ?? null,
+    campaignType: raw.campaignType ?? null,
+    radiusLabel: raw.radiusLabel ?? null,
     leadWorkStatus: raw.leadWorkStatus === "completed" || raw.leadWorkStatus === "pending" ? raw.leadWorkStatus : null,
     customerReceiptEmailSentAt: raw.customerReceiptEmailSentAt != null ? String(raw.customerReceiptEmailSentAt) : null,
     adminPurchaseEmailSentAt: raw.adminPurchaseEmailSentAt != null ? String(raw.adminPurchaseEmailSentAt) : null,
@@ -176,6 +198,7 @@ export async function listPurchaseNotifications(): Promise<(PurchaseNotification
           checkoutType: String(d.checkoutType ?? "unknown"),
           customerEmail: d.customerEmail != null ? String(d.customerEmail) : null,
           customerPhoneDigits: d.customerPhoneDigits != null ? String(d.customerPhoneDigits) : null,
+          customerPhone: d.customerPhone != null ? String(d.customerPhone) : null,
           amountTotalCents: typeof d.amountTotalCents === "number" ? d.amountTotalCents : null,
           currency: d.currency != null ? String(d.currency) : null,
           lineItems: Array.isArray(d.lineItems) ? (d.lineItems as string[]) : [],
@@ -183,6 +206,12 @@ export async function listPurchaseNotifications(): Promise<(PurchaseNotification
           leadTier: d.leadTier != null ? String(d.leadTier) : null,
           requestedLeads: typeof d.requestedLeads === "number" ? d.requestedLeads : null,
           targetingSummary: d.targetingSummary != null ? String(d.targetingSummary) : null,
+          mls: d.mls != null ? String(d.mls) : null,
+          listingAddress: d.listingAddress != null ? String(d.listingAddress) : null,
+          agentName: d.agentName != null ? String(d.agentName) : null,
+          brokerage: d.brokerage != null ? String(d.brokerage) : null,
+          campaignType: d.campaignType != null ? String(d.campaignType) : null,
+          radiusLabel: d.radiusLabel != null ? String(d.radiusLabel) : null,
           leadWorkStatus:
             d.leadWorkStatus === "completed" || d.leadWorkStatus === "pending" ? d.leadWorkStatus : null,
           customerReceiptEmailSentAt:

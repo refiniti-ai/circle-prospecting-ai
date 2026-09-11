@@ -45,13 +45,14 @@ export async function processInboundNewListing(raw: unknown) {
     lat: l?.lat ?? p.lat ?? 28.0,
     lng: l?.lng ?? p.lng ?? -82.7,
     zip,
+    listingPhotoUrl: l?.listingPhotoUrl || p.listingPhotoUrl || undefined,
     createdAt: l?.createdAt || p.createdAt || new Date().toISOString(),
     radii: {
       subdivision: { label: "Subdivision", count: counts.subdivision },
       q1: { label: "¼ Mile", count: counts.q1 },
       h1: { label: "½ Mile", count: counts.h1 },
       m1: { label: "1 Mile", count: counts.m1 },
-      zip: { label: `ZIP (${zip})`, count: counts.zip },
+      zip: { label: "Zip Code", count: counts.zip },
     },
   };
 

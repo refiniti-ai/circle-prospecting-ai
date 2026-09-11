@@ -91,6 +91,10 @@ async function sendViaGhlMailWebhook(
 
   const email = firstEmailFromList(to);
   const safeHtml = html?.trim() || "";
+  const phone = String(ghlExtras?.phone || ghlExtras?.agentPhone || "").trim();
+  const firstName = String(ghlExtras?.firstName || ghlExtras?.first_name || "").trim();
+  const lastName = String(ghlExtras?.lastName || ghlExtras?.last_name || "").trim();
+  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
   const payload = {
     source: "Circle Prospecting AI",
     event: "transactional_email",
@@ -109,7 +113,11 @@ async function sendViaGhlMailWebhook(
     /** Map this in GHL “Send Email” as HTML body if your workflow supports it. */
     html: safeHtml,
     htmlBody: safeHtml,
-    ...(ghlExtras && Object.keys(ghlExtras).length ? ghlExtras : {}),
+    ...(phone ? { phone, contact_phone: phone } : {}),
+    ...(firstName ? { firstName, first_name: firstName } : {}),
+    ...(lastName ? { lastName, last_name: lastName } : {}),
+    ...(name ? { name } : {}),
+    ...(ghlExtras && Object.keys(ghlExtras).length ? ghlWebhookFieldAliases(ghlExtras) : {}),
   };
 
   const r = await fetch(url, {
@@ -237,6 +245,82 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function displayField(value: string | null | undefined): string {
+  const t = (value ?? "").trim();
+  return t || "—";
+}
+
+export function splitPersonName(full: string | null | undefined): { firstName: string; lastName: string } {
+  const t = (full ?? "").trim();
+  if (!t) return { firstName: "", lastName: "" };
+  const space = t.indexOf(" ");
+  if (space === -1) return { firstName: t, lastName: "" };
+  return { firstName: t.slice(0, space), lastName: t.slice(space + 1).trim() };
+}
+
+/** Duplicate camelCase ghlFields as snake_case — GHL inbound webhooks often expose snake_case merge keys. */
+function ghlWebhookFieldAliases(fields: Record<string, string>): Record<string, string> {
+  const out = { ...fields };
+  const pairs: [string, string][] = [
+    ["firstName", "first_name"],
+    ["lastName", "last_name"],
+    ["listingAddress", "listing_address"],
+    ["purchasedAmount", "purchased_amount"],
+    ["orderNumber", "order_number"],
+    ["logoUrl", "logo_url"],
+    ["loginUrl", "login_url"],
+    ["amountPaid", "amount_paid"],
+    ["purchaseType", "purchase_type"],
+    ["dashboardUrl", "dashboard_url"],
+    ["sessionId", "session_id"],
+    ["agentEmail", "agent_email"],
+    ["agentPhone", "agent_phone"],
+    ["payLinkUrl", "pay_link_url"],
+    ["orderLink", "order_link"],
+    ["homesInOrder", "homes_in_order"],
+    ["plan", "plan"],
+    ["radius", "radius"],
+  ];
+  for (const [camel, snake] of pairs) {
+    if (out[camel] != null && out[camel] !== "") out[snake] = out[camel];
+  }
+  return out;
+}
+
+export function purchaseEmailLogoUrl(): string {
+  return `${productionSiteBase()}/circle-prospecting-email-logo.png`;
+}
+
+function emailLogoBlockHtml(logoUrl: string): string {
+  const safeLogoSrc = escapeHtml(logoUrl);
+  return `<img src="${safeLogoSrc}" width="560" alt="Circle Prospecting AI" style="display:block;margin:0 auto;width:100%;max-width:560px;height:auto;border:0;outline:none;text-decoration:none;" />`;
+}
+
+function purchaseDetailRow(label: string, value: string): string {
+  return `<tr>
+    <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;width:42%;vertical-align:top;">${escapeHtml(label)}</td>
+    <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;">${escapeHtml(displayField(value))}</td>
+  </tr>`;
+}
+
+function purchaseDetailRowLink(label: string, url: string): string {
+  const href = escapeHtml(url);
+  return `<tr>
+    <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;font-weight:600;width:42%;vertical-align:top;">${escapeHtml(label)}</td>
+    <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:500;"><a href="${href}" style="color:#0284c7;word-break:break-all;text-decoration:underline;">${href}</a></td>
+  </tr>`;
+}
+
+export function formatPurchasePhone(raw: string | null | undefined): string {
+  const entered = (raw ?? "").trim();
+  const digits = entered.replace(/\D/g, "");
+  const ten = digits.length >= 10 ? digits.slice(-10) : digits;
+  if (ten.length === 10) {
+    return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+  }
+  return entered || "—";
+}
+
 /** Plain + HTML so GHL/Resend always get a non-empty HTML body (GHL workflows often map only `html` / `htmlBody`). */
 export function buildPasswordResetEmailContent(
   resetLink: string,
@@ -314,6 +398,7 @@ ${args.message}`;
 function purchaseTypeLabel(checkoutType: string): string {
   const t = checkoutType.toLowerCase();
   if (t === "lead_pack") return "Lead pack";
+  if (t === "intro_campaign") return "Intro campaign";
   if (t === "campaign") return "Campaign";
   return checkoutType || "Order";
 }
@@ -333,52 +418,78 @@ export function buildCustomerPurchaseEmail(args: {
   lineItems: string[];
   amountTotalCents?: number | null;
   currency?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  agentEmail?: string | null;
+  agentPhone?: string | null;
+  payLinkUrl?: string | null;
+  listingAddress?: string | null;
+  radius?: string | null;
+  plan?: string | null;
+  homesInOrder?: string | null;
+  mls?: string | null;
 }) {
   const subject = `Order confirmed — ${args.orderNumber} | Circle Prospecting AI`;
   const amount = formatMoney(args.amountTotalCents, args.currency ?? "usd");
   const typeLabel = purchaseTypeLabel(args.checkoutType);
   const lines = args.lineItems.map((line) => `- ${line}`).join("\n");
-  const base = publicSiteBase();
-  const logoUrl = `${base}/circle-prospecting-logo.png`;
-  const loginUrl = `${base}/login`;
-  const dashboardUrl = `${base}/dashboard`;
+  const logoUrl = `${purchaseEmailLogoUrl()}?v=20260616`;
+  const siteBase = publicSiteBase();
+  const dashboardUrl = `${siteBase}/dashboard`;
   const support = supportMailto();
+  const firstName = displayField(args.firstName);
+  const lastName = displayField(args.lastName);
+  const agentEmail = displayField(args.agentEmail);
+  const agentPhone = formatPurchasePhone(args.agentPhone);
+  const listingAddress = displayField(args.listingAddress);
+  const radius = displayField(args.radius);
+  const plan = displayField(args.plan);
+  const homesInOrder = displayField(args.homesInOrder);
+  const mls = displayField(args.mls);
+  const payLinkUrl = (args.payLinkUrl ?? "").trim();
 
-  const text = `Hi,
+  const text = `Hi${args.firstName?.trim() ? ` ${args.firstName.trim()}` : ""},
 
 Thank you for your order with Circle Prospecting AI. Your payment was received.
 
-ORDER SUMMARY
+ORDER DETAILS
 -------------
-Order number: ${args.orderNumber}
-Purchase type: ${typeLabel}
-Amount paid: ${amount}
+First name:        ${firstName}
+Last name:         ${lastName}
+Agent email:       ${agentEmail}
+Agent phone:       ${agentPhone}
+Listing address:   ${listingAddress}
+Radius:            ${radius}
+Plan:              ${plan}
+Homes in order:    ${homesInOrder}
+MLS:               ${mls}
+${payLinkUrl ? `Order link:        ${payLinkUrl}\n` : ""}Purchased amount:  ${amount}
+Order number:      ${args.orderNumber}
 
 Items:
 ${lines}
 
 Reference (for support): ${args.sessionId}
 
-NEXT STEPS
-----------
-• Log in to your client dashboard: ${loginUrl}
-• View orders and delivery: ${dashboardUrl}
-
 Questions? Reply to this email or write to ${support}.
 
 — Circle Prospecting AI`;
 
-  const safeOrder = escapeHtml(args.orderNumber);
-  const safeType = escapeHtml(typeLabel);
-  const safeAmount = escapeHtml(amount);
-  const safeSession = escapeHtml(args.sessionId);
-  const safeLogoSrc = escapeHtml(logoUrl);
-  const itemsRows = args.lineItems
-    .map(
-      (line) =>
-        `<tr><td style="padding:10px 12px;border-bottom:1px solid #e8ecf1;font-size:15px;color:#1a1d26;">${escapeHtml(line)}</td></tr>`
-    )
-    .join("");
+  const logoBlock = emailLogoBlockHtml(logoUrl);
+  const detailRows = [
+    purchaseDetailRow("First name", args.firstName ?? ""),
+    purchaseDetailRow("Last name", args.lastName ?? ""),
+    purchaseDetailRow("Agent email", args.agentEmail ?? ""),
+    purchaseDetailRow("Agent phone", args.agentPhone ?? ""),
+    purchaseDetailRow("Listing address", args.listingAddress ?? ""),
+    purchaseDetailRow("Radius", args.radius ?? ""),
+    purchaseDetailRow("Plan", args.plan ?? ""),
+    purchaseDetailRow("Homes in order", args.homesInOrder ?? ""),
+    purchaseDetailRow("MLS", args.mls ?? ""),
+    ...(payLinkUrl ? [purchaseDetailRowLink("Order link", payLinkUrl)] : []),
+    purchaseDetailRow("Purchased amount", amount),
+    purchaseDetailRow("Order number", args.orderNumber),
+  ].join("");
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -389,42 +500,19 @@ Questions? Reply to this email or write to ${support}.
       <td align="center">
         <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);">
           <tr>
-            <td style="background:linear-gradient(125deg,#059669 0%,#0d9488 38%,#0891b2 72%,#0284c7 100%);padding:28px 24px;text-align:center;">
-              <img src="${safeLogoSrc}" width="200" alt="Circle Prospecting AI" style="display:block;margin:0 auto 16px;max-width:200px;width:200px;height:auto;border:0;outline:none;text-decoration:none;" />
-              <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#ecfdf5;text-shadow:0 1px 2px rgba(15,23,42,0.15);">Circle Prospecting AI</div>
-              <div style="margin-top:8px;font-size:14px;color:#d1fae5;opacity:0.98;">Order confirmation</div>
+            <td style="padding:0;background:#0a1628;text-align:center;">
+              ${logoBlock}
+              <div style="padding:4px 24px 22px;text-align:center;">
+                <span style="font-size:28px;font-weight:700;letter-spacing:-0.01em;color:#ffffff;line-height:1.25;">Order confirmation</span>
+              </div>
             </td>
           </tr>
           <tr>
             <td style="padding:28px 24px 8px;">
               <p style="margin:0 0 16px;font-size:16px;line-height:1.55;color:#334155;">Thank you for your purchase. Your payment was received successfully.</p>
-              <table role="presentation" width="100%" style="border-collapse:collapse;background:#f8fafc;border-radius:8px;margin-bottom:20px;">
-                <tr><td style="padding:14px 16px;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;font-weight:600;">Order number</td></tr>
-                <tr><td style="padding:0 16px 14px;font-size:18px;font-weight:700;color:#0f172a;">${safeOrder}</td></tr>
-                <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding:12px 16px;">
-                  <span style="display:inline-block;width:48%;font-size:13px;color:#64748b;">Type</span>
-                  <span style="display:inline-block;width:48%;text-align:right;font-size:15px;color:#1e293b;font-weight:600;">${safeType}</span>
-                </td></tr>
-                <tr><td colspan="2" style="padding:12px 16px 16px;">
-                  <span style="display:inline-block;width:48%;font-size:13px;color:#64748b;">Total paid</span>
-                  <span style="display:inline-block;width:48%;text-align:right;font-size:18px;color:#0369a1;font-weight:700;">${safeAmount}</span>
-                </td></tr>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:24px;">
+                ${detailRows}
               </table>
-              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.05em;">Items</p>
-              <table role="presentation" width="100%" style="border-collapse:collapse;border:1px solid #e8ecf1;border-radius:8px;overflow:hidden;margin-bottom:24px;">
-                ${itemsRows}
-              </table>
-              <p style="margin:0 0 20px;font-size:12px;color:#94a3b8;">Support reference: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">${safeSession}</code></p>
-              <table role="presentation" cellspacing="0" cellpadding="0" style="margin-bottom:12px;">
-                <tr>
-                  <td style="border-radius:8px;background:linear-gradient(135deg,#0284c7,#0369a1);">
-                    <a href="${escapeHtml(loginUrl)}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Log in to dashboard</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;font-size:14px;line-height:1.5;color:#64748b;">
-                View your orders anytime: <a href="${escapeHtml(dashboardUrl)}" style="color:#0284c7;">${escapeHtml(dashboardUrl)}</a>
-              </p>
             </td>
           </tr>
           <tr>
@@ -442,7 +530,77 @@ Questions? Reply to this email or write to ${support}.
 </body>
 </html>`;
 
-  return { subject, text, html };
+  return {
+    subject,
+    text,
+    html,
+    /** Extra keys for GHL inbound webhook templates (logo, order summary). */
+    ghlFields: {
+      orderNumber: args.orderNumber,
+      amountPaid: amount,
+      purchasedAmount: amount,
+      purchaseType: typeLabel,
+      checkoutType: args.checkoutType,
+      firstName,
+      lastName,
+      agentEmail,
+      agentPhone,
+      phone: args.agentPhone?.trim() || "",
+      payLinkUrl: payLinkUrl || "—",
+      orderLink: payLinkUrl || "—",
+      listingAddress,
+      radius,
+      plan,
+      homesInOrder,
+      mls,
+      logoUrl,
+      dashboardUrl,
+      sessionId: args.sessionId,
+    },
+  };
+}
+
+/** Default team inbox for order receipt copies (override with PURCHASE_NOTIFICATION_EMAIL). */
+export const DEFAULT_ORDER_NOTIFICATION_EMAIL = "info@circleprospecting.ai";
+
+/** Same HTML receipt the customer gets, prefixed for the team inbox. */
+export function buildTeamOrderEmailCopy(args: {
+  customerEmail: string;
+  orderNumber: string;
+  checkoutType: string;
+  sessionId: string;
+  lineItems: string[];
+  amountTotalCents?: number | null;
+  currency?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  agentEmail?: string | null;
+  agentPhone?: string | null;
+  payLinkUrl?: string | null;
+  listingAddress?: string | null;
+  radius?: string | null;
+  plan?: string | null;
+  homesInOrder?: string | null;
+  mls?: string | null;
+}) {
+  const customer = buildCustomerPurchaseEmail(args);
+  const subject = `[Copy] ${customer.subject}`;
+  const text = `Team copy of the customer order confirmation (sent to ${args.customerEmail}).\n\n${customer.text}`;
+  const banner = `<p style="margin:0 0 16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:13px;line-height:1.5;color:#1e40af;"><strong>Internal copy</strong> — customer receipt delivered to <a href="mailto:${escapeHtml(args.customerEmail)}" style="color:#1d4ed8;">${escapeHtml(args.customerEmail)}</a></p>`;
+  const html = customer.html.replace(
+    /<p style="margin:0 0 16px;font-size:16px;line-height:1.55;color:#334155;">/,
+    `${banner}<p style="margin:0 0 16px;font-size:16px;line-height:1.55;color:#334155;">`
+  );
+  return {
+    subject,
+    text,
+    html,
+    ghlFields: {
+      ...customer.ghlFields,
+      customerEmail: args.customerEmail,
+      internalCopy: "true",
+    },
+  };
 }
 
 export function buildAdminPurchaseEmail(args: {

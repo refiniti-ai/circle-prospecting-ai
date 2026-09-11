@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-aws-staging
 .git
 secrets
 .env
@@ -9,3 +10,8 @@ secrets
 .cursor
 terminals
 **/.DS_Store
+deploy-recovery
+firebase-live-pull
+scripts/.recovery-transcript
+_*.json
+_tmp.json

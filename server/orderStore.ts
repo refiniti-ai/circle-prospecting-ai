@@ -20,6 +20,7 @@ export type ListingPayload = {
   lat: number;
   lng: number;
   zip: string;
+  listingPhotoUrl?: string | null;
   createdAt?: string;
   radii: Record<RadiusId, { label: string; count: number }>;
 };
@@ -48,7 +49,7 @@ const DEMO: ListingPayload = {
     q1: { label: "� Mile", count: 134 },
     h1: { label: "� Mile", count: 739 },
     m1: { label: "1 Mile", count: 4035 },
-    zip: { label: "ZIP (34698)", count: 16766 },
+    zip: { label: "Zip Code", count: 16766 },
   },
 };
 

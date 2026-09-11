@@ -46,7 +46,7 @@ export async function upsertGhlContactAndOpportunity(args: {
   const auth = token ? { Authorization: `Bearer ${token}` } : undefined;
   const siteBase = productionSiteBase();
   const quoteUrl = `${siteBase}/quote?order=${encodeURIComponent(args.orderId)}&mls=${encodeURIComponent(args.mls)}&campaign=just_listed`;
-  const buyLeadsUrl = `${siteBase}/buy-leads?mls=${encodeURIComponent(args.mls)}&order=${encodeURIComponent(args.orderId)}`;
+  const buyLeadsUrl = `${siteBase}/mls/${encodeURIComponent(args.mls)}`;
 
   const contactPayload = {
     firstName: args.agentName,

@@ -1,0 +1,187 @@
+/* Agent sales sheet style: pricing columns + targeting radius (Buy Leads hero graphic) */
+.buy-sheet {
+  --buy-sheet-bg: #0c0c10;
+  --buy-sheet-border: rgba(255, 255, 255, 0.08);
+  margin: 0 0 1.25rem;
+  padding: 1.35rem 1.15rem 1.5rem;
+  border-radius: 14px;
+  background: var(--buy-sheet-bg);
+  color: #e8eaef;
+  border: 1px solid var(--buy-sheet-border);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.buy-sheet__cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@media (max-width: 1024px) {
+  .buy-sheet__cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .buy-sheet__cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.buy-sheet-col {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--buy-sheet-border);
+  background: #12131a;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.buy-sheet-col:focus-within,
+.buy-sheet-col:hover {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.buy-sheet-col--active {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.buy-sheet-col__banner {
+  padding: 0.55rem 0.65rem;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.buy-sheet-col__desc {
+  margin: 0;
+  padding: 0.55rem 0.65rem 0.65rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #a8b0c2;
+  border-bottom: 1px solid var(--buy-sheet-border);
+  flex-shrink: 0;
+}
+
+.buy-sheet-col__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.buy-sheet-col__table th {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  color: #7c8496;
+  font-weight: 600;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.buy-sheet-col__table td {
+  padding: 0.38rem 0.5rem;
+  color: #dce1ec;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.buy-sheet-col__table tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.buy-sheet-col__table tr:hover td {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.buy-sheet-col__table tr.is-picked td {
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+}
+
+.buy-sheet-col__table td:last-child {
+  text-align: right;
+  color: #f0f4fc;
+  white-space: nowrap;
+}
+
+.buy-sheet-radius {
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--buy-sheet-border);
+}
+
+.buy-sheet-radius__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b93a5;
+  text-align: center;
+}
+
+.buy-sheet-radius__row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.buy-sheet-radius__pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.55rem 0.75rem;
+  min-width: 5.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--buy-sheet-border);
+  background: #14151c;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.buy-sheet-radius__pill:hover {
+  background: #1a1c26;
+}
+
+.buy-sheet-radius__pill.is-active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+}
+
+.buy-sheet-radius__mi {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+
+.buy-sheet-radius__range {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.25;
+  max-width: 8rem;
+}
+
+.buy-sheet-footnote {
+  margin: 0.65rem 0 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: #6b7280;
+}

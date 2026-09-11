@@ -16,7 +16,7 @@ export const MOCK_DELIVERY_OPPORTUNITIES: MockDeliveryListing[] = [
       { filter: "1/4 Mile", homes: 372 },
       { filter: "1/2 Mile", homes: 791 },
       { filter: "1 Mile", homes: 3329 },
-      { filter: "34685 ZipCode", homes: 7317 },
+      { filter: "Zip Code", homes: 7317 },
     ],
   },
   {
@@ -27,7 +27,7 @@ export const MOCK_DELIVERY_OPPORTUNITIES: MockDeliveryListing[] = [
       { filter: "1/4 Mile", homes: 289 },
       { filter: "1/2 Mile", homes: 612 },
       { filter: "1 Mile", homes: 2641 },
-      { filter: "34698 ZipCode", homes: 5890 },
+      { filter: "Zip Code", homes: 5890 },
     ],
   },
 ];
