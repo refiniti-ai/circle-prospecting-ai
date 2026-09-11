@@ -1,0 +1,23 @@
+version: 0.2
+
+# Builds the Express API image and pushes it to ECR.
+# Used by the CodeBuild project circle-prospecting-api-build so that no Docker
+# install is needed on a developer machine.
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to ECR ${ECR_REGISTRY}"
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+      - IMAGE_TAG="build-${CODEBUILD_BUILD_NUMBER}"
+      - echo "Image tag ${IMAGE_TAG}"
+  build:
+    commands:
+      - echo "Building image"
+      - docker build -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" .
+  post_build:
+    commands:
+      - echo "Pushing image"
+      - docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+      - docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+      - echo "Pushed ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
