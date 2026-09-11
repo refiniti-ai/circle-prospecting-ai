@@ -22,6 +22,10 @@ server/data/*.json
 server/data/platform/
 !server/data/.gitkeep
 
+# Generated AWS config (mirrors live service settings)
+infra/aws/apprunner-env.generated.json
+infra/aws/apprunner-service.generated.json
+
 # Local scratch files and third-party data dumps
 _*.json
 tmp-*.json

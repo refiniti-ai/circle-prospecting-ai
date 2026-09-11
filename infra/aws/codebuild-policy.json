@@ -32,13 +32,23 @@
       "Resource": "arn:aws:ecr:us-east-2:381767547693:repository/circle-prospecting-api"
     },
     {
-      "Sid": "ReadBuildSource",
+      "Sid": "ReadBuildSourceObjects",
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
         "s3:GetObjectVersion"
       ],
       "Resource": "arn:aws:s3:::circle-prospecting-build-source-381767547693/*"
+    },
+    {
+      "Sid": "ReadBuildSourceBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketAcl",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::circle-prospecting-build-source-381767547693"
     }
   ]
 }

@@ -133,18 +133,40 @@ The site is a single-page app, so CloudFront must send every address to `index.h
 
 Without this, a link like `/99promo/listed/mls/A4692040` shows an error instead of the listing.
 
-### Staging site is live
+### Staging is live — website **and** server now run on AWS
 
 **https://d209dfj15nbkw2.cloudfront.net**
 
-- Website files: S3 `circle-prospecting-web-staging` (Ohio)
-- HTTPS + CDN: CloudFront `d209dfj15nbkw2.cloudfront.net`
-- API: still the existing server (not yet moved to AWS)
+| Part | Where it runs | Name |
+| --- | --- | --- |
+| Website | S3 + CloudFront (Ohio) | `circle-prospecting-web-staging` / `d209dfj15nbkw2.cloudfront.net` |
+| Server (API) | App Runner (Ohio) | `https://mtfkh3putv.us-east-2.awsapprunner.com` |
+| Container image | ECR | `circle-prospecting-api:latest` |
+| Image builds | CodeBuild from GitHub | `circle-prospecting-api-build` |
+| Passwords and keys | Secrets Manager | `circle-prospecting/*` (12 secrets) |
+| Business data | **Still Google Firestore** | migration planned separately |
 
 Known and expected on staging: after a Stripe payment, the browser returns to
 `circleprospecting.ai` instead of the staging address. Everything before that
 step works normally. This corrects itself once the site moves to the real
 domain.
+
+### Rebuilding and redeploying staging
+
+```powershell
+# 1. Rebuild the website against the AWS API
+$env:VITE_API_BASE_URL="https://mtfkh3putv.us-east-2.awsapprunner.com"
+npx vite build --outDir dist-aws-staging --emptyOutDir
+
+# 2. Upload and clear the cache
+aws s3 sync dist-aws-staging s3://circle-prospecting-web-staging --delete --region us-east-2
+aws cloudfront create-invalidation --distribution-id EQOQZ0OR5EYLW --paths "/*"
+
+# 3. Rebuild the server image after pushing code to GitHub
+aws codebuild start-build --project-name circle-prospecting-api-build --region us-east-2
+```
+
+App Runner redeploys automatically when a new `:latest` image is pushed.
 
 ### 10. We connect the API
 
