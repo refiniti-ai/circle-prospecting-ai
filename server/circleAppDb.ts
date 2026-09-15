@@ -36,6 +36,10 @@ function fireAndForget(label: string, work: () => Promise<unknown>): void {
   });
 }
 
+export function getCircleAppPool(): mysql.Pool {
+  return getPool();
+}
+
 export function dualWriteOrder(doc: Record<string, unknown> & { id: string }): void {
   fireAndForget("order upsert", async () => {
     const now = new Date();

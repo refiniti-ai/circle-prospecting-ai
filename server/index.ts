@@ -61,6 +61,7 @@ import {
 } from "./introListingSnapshotApi.js";
 import { handleRoofsListingByMls } from "./roofsListingApi.js";
 import { isRoofsDbConfigured } from "./roofsMlsStore.js";
+import { backfillCircleFromFirestore } from "./circleBackfill.js";
 import {
   fetchGhlContact,
   fetchGhlContactPrefill,
@@ -2361,6 +2362,9 @@ app.use("/api", (req: Request, res: Response) => {
 
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`API listening on port ${PORT}`);
+  void backfillCircleFromFirestore().catch((err: unknown) => {
+    console.error("[circleBackfill] failed; Google data unchanged", err);
+  });
 });
 server.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {
