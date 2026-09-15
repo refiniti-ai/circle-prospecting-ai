@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { rdsMysqlSsl } from "./rdsMysqlSsl.js";
 
 /** Business-data MySQL (`circle` on new-production). Listings stay in `roofs`. */
 let pool: mysql.Pool | null = null;
@@ -23,7 +24,7 @@ function getPool(): mysql.Pool {
     waitForConnections: true,
     connectionLimit: 4,
     enableKeepAlive: true,
-    ssl: { rejectUnauthorized: true },
+    ssl: rdsMysqlSsl(),
   });
   return pool;
 }

@@ -2,6 +2,7 @@ import mysql from "mysql2/promise";
 import type { ListingAgentInfo } from "../src/lib/listingAgents.ts";
 import type { ListingPayload } from "../src/lib/listingData.ts";
 import { ZIP_RING_LABEL } from "../src/lib/listingData.ts";
+import { rdsMysqlSsl } from "./rdsMysqlSsl.js";
 
 export type RoofsMlsStatus = "active" | "coming_soon" | "pending" | "closed";
 
@@ -103,7 +104,7 @@ function getPool(): mysql.Pool {
     waitForConnections: true,
     connectionLimit: 4,
     enableKeepAlive: true,
-    ssl: { rejectUnauthorized: true },
+    ssl: rdsMysqlSsl(),
   });
   return pool;
 }
