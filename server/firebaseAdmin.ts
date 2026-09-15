@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { cert, getApps, initializeApp, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 
 function parseServiceAccountFromEnv():
   | { projectId: string; clientEmail: string; privateKey: string }
@@ -49,8 +50,9 @@ function parseServiceAccountFromFile():
   }
 }
 
-/** Firestore is optional. When credentials are absent, callers should gracefully fall back to local storage. */
+/** Firestore is optional. Staging AWS CRM mode does not use Google. */
 export function getFirestoreDb() {
+  if (isAwsCrmMode()) return null;
   if (getApps().length === 0) {
     const svc = parseServiceAccountFromEnv() ?? parseServiceAccountFromFile();
     if (svc) {

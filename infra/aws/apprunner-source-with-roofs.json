@@ -6,7 +6,7 @@
       "Port": "8080",
       "RuntimeEnvironmentVariables": {
         "ADMIN_USERNAME": "admin",
-        "APP_PUBLIC_URL": "https://circleprospecting.ai",
+        "APP_PUBLIC_URL": "https://d209dfj15nbkw2.cloudfront.net",
         "CORS_ORIGIN": "https://circleprospecting.ai,https://www.circleprospecting.ai,https://circle-prospecting-ai.web.app,https://d209dfj15nbkw2.cloudfront.net",
         "FIREBASE_PROJECT_ID": "circle-prospecting-ai",
         "GHL_LOCATION_ID": "YCc3oqsHSOrxQ5ojV68g",
@@ -18,7 +18,8 @@
         "ROOFS_DB_PORT": "3306",
         "ROOFS_DB_NAME": "roofs",
         "ROOFS_DB_USER": "circle",
-        "CIRCLE_APP_DB_NAME": "circle"
+        "CIRCLE_APP_DB_NAME": "circle",
+        "CIRCLE_CRM_MODE": "aws"
       },
       "RuntimeEnvironmentSecrets": {
         "ADMIN_PASSWORD": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/ADMIN_PASSWORD-c4hn2Z",

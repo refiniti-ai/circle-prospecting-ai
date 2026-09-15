@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { productionSiteBase } from "../src/lib/siteUrl.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 
 /** For /api/health — explains why mail is disabled when no transport is configured. */
 export function getMailTransportInfo(): {
@@ -8,7 +9,7 @@ export function getMailTransportInfo(): {
   /** Short hint when `configured` is false (safe to expose publicly). */
   setupHint: string;
 } {
-  if (process.env.GHL_MAIL_WEBHOOK_URL?.trim()) {
+  if (process.env.GHL_MAIL_WEBHOOK_URL?.trim() && !isAwsCrmMode()) {
     return { configured: true, mode: "ghl", setupHint: "GHL inbound webhook" };
   }
   if (process.env.RESEND_API_KEY?.trim()) {
@@ -189,7 +190,7 @@ export async function sendTextEmail(
   html?: string,
   options?: SendTextEmailOptions
 ) {
-  const ghlMail = process.env.GHL_MAIL_WEBHOOK_URL?.trim();
+  const ghlMail = isAwsCrmMode() ? "" : process.env.GHL_MAIL_WEBHOOK_URL?.trim();
   if (ghlMail) {
     await sendViaGhlMailWebhook(to, subject, text, html, options?.ghlExtras);
     return { mode: "ghl" as const };

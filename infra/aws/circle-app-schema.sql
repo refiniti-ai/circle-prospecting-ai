@@ -107,3 +107,46 @@ CREATE TABLE IF NOT EXISTS site_credentials (
   updated_at VARCHAR(40) NOT NULL,
   PRIMARY KEY (id)
 );
+
+-- AWS CRM (staging). Replaces GHL contacts / opportunities / pay-link fields.
+CREATE TABLE IF NOT EXISTS contacts (
+  id VARCHAR(64) NOT NULL,
+  email VARCHAR(255) NULL,
+  name VARCHAR(255) NULL,
+  phone VARCHAR(64) NULL,
+  brokerage VARCHAR(255) NULL,
+  payload JSON NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_contacts_email (email)
+);
+
+CREATE TABLE IF NOT EXISTS pay_links (
+  id VARCHAR(64) NOT NULL,
+  contact_id VARCHAR(64) NOT NULL,
+  mls VARCHAR(40) NOT NULL,
+  campaign_path VARCHAR(24) NULL,
+  agent_role VARCHAR(24) NULL,
+  pay_link_url VARCHAR(768) NOT NULL,
+  tracked_url VARCHAR(768) NOT NULL,
+  stripe_checkout_url VARCHAR(768) NULL,
+  payload JSON NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (id),
+      UNIQUE KEY uq_pay_links_mls_path (mls, campaign_path),
+  KEY idx_pay_links_mls (mls)
+);
+
+CREATE TABLE IF NOT EXISTS checkout_links (
+  id VARCHAR(64) NOT NULL,
+  contact_id VARCHAR(64) NOT NULL,
+  session_id VARCHAR(128) NOT NULL,
+  url VARCHAR(768) NOT NULL,
+  plan VARCHAR(120) NULL,
+  amount_cents INT NULL,
+  payload JSON NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_checkout_links_contact (contact_id),
+  KEY idx_checkout_links_session (session_id)
+);

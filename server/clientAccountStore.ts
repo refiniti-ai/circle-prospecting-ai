@@ -4,6 +4,12 @@ import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { getFirestoreDb } from "./firebaseAdmin.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
+import {
+  getCircleClientAccount,
+  listCircleClientAccountEmails,
+  upsertCircleClientAccount,
+} from "./circleAppDb.js";
 
 const scryptAsync = promisify(scrypt);
 const KEYLEN = 64;
@@ -69,6 +75,17 @@ export async function getClientAccount(email: string): Promise<ClientAccountReco
   const e = normalizeEmail(email);
   if (!e.includes("@")) return null;
 
+  if (isAwsCrmMode()) {
+    const fromCircle = await getCircleClientAccount(e);
+    if (!fromCircle) return null;
+    return {
+      email: e,
+      passwordHash: fromCircle.passwordHash,
+      salt: fromCircle.salt,
+      updatedAt: fromCircle.updatedAt,
+    };
+  }
+
   /**
    * Firestore first: on Cloud Run the JSON file is per-instance / ephemeral; accounts written to
    * Firestore must be found from any instance. Local file is the fallback for dev without Firebase.
@@ -104,6 +121,9 @@ export async function getClientAccount(email: string): Promise<ClientAccountReco
 
 /** Emails that have a dashboard password (local + Firestore merge). */
 export async function listClientAccountEmails(): Promise<string[]> {
+  if (isAwsCrmMode()) {
+    return (await listCircleClientAccountEmails()).sort((a, b) => a.localeCompare(b));
+  }
   const set = new Set<string>();
   const log = readFile();
   for (const [email, row] of Object.entries(log.accounts)) {
@@ -129,6 +149,11 @@ export async function upsertClientPassword(email: string, passwordHash: string, 
   if (!e.includes("@")) throw new Error("invalid email");
 
   const updatedAt = new Date().toISOString();
+  if (isAwsCrmMode()) {
+    await upsertCircleClientAccount({ email: e, passwordHash, salt, updatedAt });
+    return;
+  }
+
   const db = getFirestoreDb();
   if (db) {
     try {

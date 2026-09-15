@@ -62,13 +62,22 @@ import {
 import { handleRoofsListingByMls } from "./roofsListingApi.js";
 import { isRoofsDbConfigured } from "./roofsMlsStore.js";
 import { backfillCircleFromFirestore } from "./circleBackfill.js";
+import { crmModeLabel, isAwsCrmMode } from "./circleCrmMode.js";
+import { ensureCircleCrmTables } from "./circleCrmStore.js";
+import {
+  circleContactToPrefill,
+  circleContactToView,
+  circleContactsByMls,
+  circleContactsToSearchHits,
+  circleOpportunitiesSummary,
+  handleAwsGeneratePayLink,
+  handleAwsGetPayLink,
+} from "./circlePayLink.js";
 import {
   fetchGhlContact,
   fetchGhlContactPrefill,
   searchGhlContacts,
   searchGhlContactsByMls,
-  updateGhlContactFields,
-  asInt,
   PAY_LINK_FIELD_KEYS,
 } from "./ghlContactFetch.js";
 import { listContactOpportunitiesSummary } from "./ghlOpportunityFetch.js";
@@ -399,6 +408,8 @@ app.get("/api/health", generalLimit, (_req: Request, res: Response) => {
     time: new Date().toISOString(),
     firestore,
     roofsDb: isRoofsDbConfigured(),
+    circleDb: Boolean(process.env.CIRCLE_APP_DB_NAME?.trim() || process.env.CIRCLE_APP_DB_ENABLED === "1"),
+    crmMode: crmModeLabel(),
     mailTransport: mail.mode,
     mailConfigured: mail.configured,
     ...(!mail.configured ? { mailSetupHint: mail.setupHint } : {}),
@@ -1122,6 +1133,11 @@ app.post("/api/generate-pay-link", checkoutLimit, async (req: Request, res: Resp
     }
   }
 
+  if (isAwsCrmMode()) {
+    await handleAwsGeneratePayLink(req, res);
+    return;
+  }
+
   const parsed = ghlContactMlsLinkBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
@@ -1298,6 +1314,10 @@ app.post("/api/generate-pay-link", checkoutLimit, async (req: Request, res: Resp
 /**
  * Same MLS URL as generate-pay-link; writes buy_leads_url (alias for workflows using that field).
  */
+app.get("/api/pay-links", generalLimit, async (req: Request, res: Response) => {
+  await handleAwsGetPayLink(req, res);
+});
+
 app.post("/api/generate-buy-leads-link", checkoutLimit, async (req: Request, res: Response) => {
   const requiredToken = process.env.GENERATE_CHECKOUT_TOKEN?.trim();
   if (requiredToken) {
@@ -1306,6 +1326,11 @@ app.post("/api/generate-buy-leads-link", checkoutLimit, async (req: Request, res
       res.status(401).json({ error: "unauthorized", message: "Missing or invalid X-Webhook-Token header." });
       return;
     }
+  }
+
+  if (isAwsCrmMode()) {
+    await handleAwsGeneratePayLink(req, res);
+    return;
   }
 
   const parsed = ghlContactMlsLinkBody.safeParse(req.body);
@@ -1476,7 +1501,7 @@ app.get("/api/ghl-contacts/search", generalLimit, async (req: Request, res: Resp
     return;
   }
   try {
-    const results = await searchGhlContacts(q, 12);
+    const results = isAwsCrmMode() ? await circleContactsToSearchHits(q, 12) : await searchGhlContacts(q, 12);
     const first = results[0];
     const kind = classifySearchQuery(q);
     const page = searchCatchPageFromRequest(req);
@@ -1494,7 +1519,7 @@ app.get("/api/ghl-contacts/search", generalLimit, async (req: Request, res: Resp
       matchedPhone: first?.phone ?? null,
       matchedMls: first?.mls ?? null,
     });
-    if (kind === "email" || kind === "phone") {
+    if (!isAwsCrmMode() && (kind === "email" || kind === "phone")) {
       safePushWebsiteSearchToGhl({
         kind,
         query: q,
@@ -1539,7 +1564,7 @@ app.get("/api/ghl-contacts/search-by-mls", generalLimit, async (req: Request, re
     return;
   }
   try {
-    const results = await searchGhlContactsByMls(mls, 12);
+    const results = isAwsCrmMode() ? await circleContactsByMls(mls, 12) : await searchGhlContactsByMls(mls, 12);
     const first = results[0];
     safeRecordSearchCatch({
       kind: "mls",
@@ -1583,6 +1608,16 @@ app.get("/api/ghl-contacts/:contactId/prefill", generalLimit, async (req: Reques
   }
   try {
     const mlsQ = String(req.query.mls || "").trim();
+    if (isAwsCrmMode()) {
+      const prefill = await circleContactToPrefill(contactId, mlsQ || undefined);
+      if (!prefill) {
+        res.status(404).json({ error: "contact_not_found" });
+        return;
+      }
+      res.setHeader("Cache-Control", "private, max-age=60");
+      res.json({ ok: true, prefill });
+      return;
+    }
     const prefill = await fetchGhlContactPrefill(contactId, mlsQ || undefined);
     res.setHeader("Cache-Control", "private, max-age=60");
     res.json({ ok: true, prefill });
@@ -1609,6 +1644,11 @@ app.get("/api/ghl-contacts/:contactId/opportunities", generalLimit, async (req: 
     return;
   }
   try {
+    if (isAwsCrmMode()) {
+      const opportunities = await circleOpportunitiesSummary(contactId, 50);
+      res.json({ ok: true, contactId, count: opportunities.length, opportunities });
+      return;
+    }
     const opportunities = await listContactOpportunitiesSummary(contactId, 50);
     res.json({ ok: true, contactId, count: opportunities.length, opportunities });
   } catch (e) {
@@ -1638,6 +1678,15 @@ app.get("/api/ghl-contact/:contactId", generalLimit, async (req: Request, res: R
     return;
   }
   try {
+    if (isAwsCrmMode()) {
+      const contact = await circleContactToView(contactId);
+      if (!contact) {
+        res.status(404).json({ error: "contact_not_found", message: "No contact matches this link." });
+        return;
+      }
+      res.json({ ok: true, contact, fieldKeys: PAY_LINK_FIELD_KEYS });
+      return;
+    }
     const contact = await fetchGhlContact(contactId);
     res.json({ ok: true, contact, fieldKeys: PAY_LINK_FIELD_KEYS });
   } catch (e) {
@@ -1696,10 +1745,19 @@ app.post("/api/checkout/from-contact", checkoutLimit, async (req: Request, res: 
 
   let contact;
   try {
-    contact = await fetchGhlContact(contactId);
+    if (isAwsCrmMode()) {
+      const awsContact = await circleContactToView(contactId);
+      if (!awsContact) {
+        res.status(404).json({ error: "contact_not_found" });
+        return;
+      }
+      contact = awsContact;
+    } else {
+      contact = await fetchGhlContact(contactId);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "contact_fetch_failed";
-    res.status(502).json({ error: "ghl_error", message: msg });
+    res.status(502).json({ error: isAwsCrmMode() ? "contact_error" : "ghl_error", message: msg });
     return;
   }
 
@@ -2362,9 +2420,18 @@ app.use("/api", (req: Request, res: Response) => {
 
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`API listening on port ${PORT}`);
-  void backfillCircleFromFirestore().catch((err: unknown) => {
-    console.error("[circleBackfill] failed; Google data unchanged", err);
-  });
+  void (async () => {
+    try {
+      await ensureCircleCrmTables();
+    } catch (err: unknown) {
+      console.error("[circleCrm] table ensure failed", err);
+    }
+    try {
+      await backfillCircleFromFirestore();
+    } catch (err: unknown) {
+      console.error("[circleBackfill] failed; Google data unchanged", err);
+    }
+  })();
 });
 server.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {

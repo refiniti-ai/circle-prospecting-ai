@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { dualWritePurchase } from "./circleAppDb.js";
+import { dualWritePurchase, getCirclePurchasePayload, listCirclePurchasePayloads } from "./circleAppDb.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 import { getFirestoreDb } from "./firebaseAdmin.js";
 
 export type LeadWorkStatus = "pending" | "completed";
@@ -108,6 +109,9 @@ function purchaseDocData(sessionId: string, record: PurchaseNotificationRecord &
 }
 
 export async function hasPurchaseNotification(sessionId: string): Promise<boolean> {
+  if (isAwsCrmMode()) {
+    return Boolean(await getCirclePurchasePayload(sessionId));
+  }
   const log = readLog();
   if (Boolean(log.sessions[sessionId])) return true;
   const db = getFirestoreDb();
@@ -151,6 +155,37 @@ export async function markPurchaseNotification(
   dualWritePurchase(sessionId, purchaseDocData(sessionId, { ...merged, sessionId }));
 }
 
+function purchaseRowFromPayload(
+  sessionId: string,
+  d: Record<string, unknown>
+): PurchaseNotificationRecord & { sessionId: string } {
+  return {
+    sessionId,
+    orderNumber: String(d.orderNumber ?? ""),
+    notifiedAt: String(d.notifiedAt ?? ""),
+    checkoutType: String(d.checkoutType ?? "unknown"),
+    customerEmail: d.customerEmail != null ? String(d.customerEmail) : null,
+    customerPhoneDigits: d.customerPhoneDigits != null ? String(d.customerPhoneDigits) : null,
+    customerPhone: d.customerPhone != null ? String(d.customerPhone) : null,
+    amountTotalCents: typeof d.amountTotalCents === "number" ? d.amountTotalCents : null,
+    currency: d.currency != null ? String(d.currency) : null,
+    lineItems: Array.isArray(d.lineItems) ? (d.lineItems as string[]) : [],
+    leadServiceLine: d.leadServiceLine != null ? String(d.leadServiceLine) : null,
+    leadTier: d.leadTier != null ? String(d.leadTier) : null,
+    requestedLeads: typeof d.requestedLeads === "number" ? d.requestedLeads : null,
+    targetingSummary: d.targetingSummary != null ? String(d.targetingSummary) : null,
+    mls: d.mls != null ? String(d.mls) : null,
+    listingAddress: d.listingAddress != null ? String(d.listingAddress) : null,
+    agentName: d.agentName != null ? String(d.agentName) : null,
+    brokerage: d.brokerage != null ? String(d.brokerage) : null,
+    campaignType: d.campaignType != null ? String(d.campaignType) : null,
+    radiusLabel: d.radiusLabel != null ? String(d.radiusLabel) : null,
+    leadWorkStatus: d.leadWorkStatus === "completed" || d.leadWorkStatus === "pending" ? d.leadWorkStatus : null,
+    customerReceiptEmailSentAt: d.customerReceiptEmailSentAt != null ? String(d.customerReceiptEmailSentAt) : null,
+    adminPurchaseEmailSentAt: d.adminPurchaseEmailSentAt != null ? String(d.adminPurchaseEmailSentAt) : null,
+  };
+}
+
 function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] {
   const log = readLog();
   return Object.entries(log.sessions).map(([sessionId, raw]) => ({
@@ -182,6 +217,12 @@ function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] 
 
 /** Newest first — merges Firestore + local JSON (Firestore wins per session id). */
 export async function listPurchaseNotifications(): Promise<(PurchaseNotificationRecord & { sessionId: string })[]> {
+  if (isAwsCrmMode()) {
+    const fromCircle = await listCirclePurchasePayloads();
+    const rows = fromCircle.map(({ sessionId, payload }) => purchaseRowFromPayload(sessionId, payload));
+    rows.sort((a, b) => (a.notifiedAt < b.notifiedAt ? 1 : -1));
+    return rows;
+  }
   const fromFile = rowsFromFile();
   const merged = new Map<string, PurchaseNotificationRecord & { sessionId: string }>();
   for (const r of fromFile) merged.set(r.sessionId, r);

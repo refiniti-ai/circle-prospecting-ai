@@ -1,5 +1,6 @@
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { isCircleAppDbConfigured, getCircleAppPool } from "./circleAppDb.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 import { getFirestoreDb } from "./firebaseAdmin.js";
 
 const PAGE = 200;
@@ -45,6 +46,10 @@ function num(v: unknown): number | null {
 /** One-way copy Google → MySQL `circle`. Does not delete Google. Idempotent upserts. */
 export async function backfillCircleFromFirestore(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
+  if (isAwsCrmMode()) {
+    console.log("[circleBackfill] skipped (CIRCLE_CRM_MODE=aws; not reading Google)");
+    return counts;
+  }
   if (!isCircleAppDbConfigured() || !getFirestoreDb()) {
     console.log("[circleBackfill] skipped (circle db or Firestore not configured)");
     return counts;

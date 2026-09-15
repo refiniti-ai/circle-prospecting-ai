@@ -12,6 +12,7 @@ import { updateGhlContactFields } from "./ghlContactFetch.js";
 import { countClicksForContact, recordPayLinkClick } from "./payLinkClickStore.js";
 import { opsLog } from "./opsLog.js";
 import { trackEvent } from "./analyticsStore.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 
 const CONTACT_ID_RE = /^[A-Za-z0-9._-]{1,120}$/;
 const MLS_RE = /^[A-Za-z0-9._-]{3,40}$/;
@@ -91,10 +92,11 @@ export function buildTrackedPayLinkUrl(
       listingType: opts?.listingType,
     });
   const params = new URLSearchParams({
-    c: contactId.trim(),
     mls: mls.trim(),
     type: campaignPath,
   });
+  const cid = contactId.trim();
+  if (cid) params.set("c", cid);
   return `${base}/go?${params.toString()}`;
 }
 
@@ -105,6 +107,7 @@ function clientIp(req: Request): string | undefined {
 }
 
 async function syncGhlPayLinkClick(contactId: string, clickedAt: string, clickCount: number): Promise<void> {
+  if (isAwsCrmMode()) return;
   const clickedKey = process.env.GHL_PAY_LINK_CLICKED_AT_FIELD_KEY?.trim();
   const countKey = process.env.GHL_PAY_LINK_CLICK_COUNT_FIELD_KEY?.trim();
   if (!clickedKey && !countKey) return;
@@ -126,9 +129,10 @@ export async function handlePayLinkGo(req: Request): Promise<{ redirectUrl: stri
   const campaignPath = parsePayLinkCampaignPath(req);
   const agentRole = parsePayLinkAgentRole(req);
 
-  if (!contactId || !mls) {
+  if (!mls) {
     return { error: "invalid_params", status: 400 };
   }
+  const clickContactId = contactId || `mls:${mls}`;
 
   const redirectUrl = buildMlsCheckoutUrl(mls, { campaignPath, agentRole, contactId });
   const ip = clientIp(req);
@@ -136,17 +140,17 @@ export async function handlePayLinkGo(req: Request): Promise<{ redirectUrl: stri
   const referer = req.header("referer") || undefined;
 
   const click = await recordPayLinkClick({
-    contactId,
+    contactId: clickContactId,
     mls,
     agentRole: agentRole ?? (campaignPath === "buyer" ? "buyer" : campaignPath ? "seller" : undefined),
     ip,
     userAgent,
     referer,
   });
-  const clickCount = await countClicksForContact(contactId);
+  const clickCount = await countClicksForContact(clickContactId);
 
   opsLog("pay_link_clicked", {
-    contactId,
+    contactId: clickContactId,
     mls,
     campaignPath: campaignPath ?? "",
     agentRole: agentRole ?? "",
@@ -155,9 +159,9 @@ export async function handlePayLinkGo(req: Request): Promise<{ redirectUrl: stri
   });
   trackEvent({
     event: "pay_link_click",
-    tenantId: "ghl",
+    tenantId: isAwsCrmMode() ? "aws" : "ghl",
     metadata: {
-      contactId,
+      contactId: clickContactId,
       mls,
       campaignPath: campaignPath ?? "",
       agentRole: agentRole ?? "",
@@ -165,7 +169,7 @@ export async function handlePayLinkGo(req: Request): Promise<{ redirectUrl: stri
     },
   });
 
-  void syncGhlPayLinkClick(contactId, click.clickedAt, clickCount);
+  if (contactId) void syncGhlPayLinkClick(contactId, click.clickedAt, clickCount);
 
   return { redirectUrl };
 }

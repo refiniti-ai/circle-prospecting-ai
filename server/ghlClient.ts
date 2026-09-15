@@ -1,4 +1,5 @@
 import { productionSiteBase } from "../src/lib/siteUrl.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 
 export type GhlResult = {
   contactId?: string;
@@ -39,7 +40,7 @@ export async function upsertGhlContactAndOpportunity(args: {
   const oppUrl = process.env.GHL_CREATE_OPPORTUNITY_URL;
   const token = process.env.GHL_BEARER_TOKEN;
 
-  if (!contactUrl || !oppUrl) {
+  if (isAwsCrmMode() || !contactUrl || !oppUrl) {
     return { mode: "skipped" } as GhlResult;
   }
 

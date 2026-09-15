@@ -6,6 +6,8 @@ import { z } from "zod";
 import { opsLog } from "./opsLog.js";
 import { recordCheckoutStarted } from "./checkoutFunnelStore.js";
 import { productionSiteBase } from "../src/lib/siteUrl.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
+import { insertCircleCheckoutLink } from "./circleCrmStore.js";
 
 /**
  * POST /api/generate-checkout
@@ -218,14 +220,31 @@ export function createGenerateCheckoutHandler() {
       return;
     }
 
-    const ghl = await updateGhlCheckoutUrl({
-      contactId,
-      email,
-      plan,
-      amount,
-      url: session.url,
-      sessionId: session.id,
-    });
+    const ghl = isAwsCrmMode()
+      ? { mode: "skipped" as const, reason: "CIRCLE_CRM_MODE=aws" }
+      : await updateGhlCheckoutUrl({
+          contactId,
+          email,
+          plan,
+          amount,
+          url: session.url,
+          sessionId: session.id,
+        });
+
+    if (isAwsCrmMode()) {
+      try {
+        await insertCircleCheckoutLink({
+          contactId,
+          sessionId: session.id,
+          url: session.url,
+          plan,
+          amountCents,
+          payload: { source: "generate-checkout" },
+        });
+      } catch (err) {
+        console.error("[generate-checkout] circle write failed", err);
+      }
+    }
 
     opsLog("generate_checkout_session_created", {
       sessionId: session.id,

@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { SearchCatchKind } from "./searchCatcherStore.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 
 const PIPELINE_NAME = process.env.GHL_SEARCH_PIPELINE_NAME?.trim() || "Website searches";
 const STAGE_NAME = process.env.GHL_SEARCH_PIPELINE_STAGE_NAME?.trim() || "New search";
@@ -163,6 +164,7 @@ export type WebsiteSearchPushInput = {
 };
 
 export async function pushWebsiteSearchToGhl(input: WebsiteSearchPushInput): Promise<void> {
+  if (isAwsCrmMode()) return;
   if (input.kind !== "email" && input.kind !== "phone") return;
 
   const token = process.env.GHL_BEARER_TOKEN?.trim();

@@ -12,6 +12,7 @@ import {
 } from "./mailer.js";
 import { canonicalCheckoutEmail, normalizePhoneDigits } from "./checkoutIdentity.js";
 import { updateGhlContactFields } from "./ghlContactFetch.js";
+import { isAwsCrmMode } from "./circleCrmMode.js";
 import { safeSendMetaPurchaseCapi } from "./metaCapi.js";
 import { buildMlsCheckoutUrl } from "./payLinkTrack.js";
 import { parseAgentRoleInput } from "../src/lib/listingAgents.js";
@@ -295,7 +296,7 @@ export async function applyPaidCheckoutSessionSideEffects(s: Stripe.Checkout.Ses
   }
 
   const ghlContactId = (s.metadata?.ghlContactId || "").trim();
-  if (ghlContactId) {
+  if (ghlContactId && !isAwsCrmMode()) {
     try {
       const amountUsd = typeof s.amount_total === "number" ? (s.amount_total / 100).toFixed(2) : "";
       const fields: Record<string, string> = {
