@@ -1,0 +1,9 @@
+{
+  "EgressConfiguration": {
+    "EgressType": "VPC",
+    "VpcConnectorArn": "arn:aws:apprunner:us-east-2:381767547693:vpcconnector/circle-prospecting-rds/1/2c924d75f1b24395983905b9c59f80a8"
+  },
+  "IngressConfiguration": {
+    "IsPubliclyAccessible": true
+  }
+}

@@ -10,6 +10,7 @@ import type { CampaignPropertyType } from "./leadsApi";
 import type { LeadServiceLine, LeadTierId } from "./leadPricing";
 
 import { firstTimeCustomerAgentPath } from "./introAgentPhone";
+import type { MlsCampaignPathSegment } from "./mlsCampaignPath";
 
 export const INTRO_CAMPAIGN = {
   path: "/99promo",
@@ -39,6 +40,7 @@ export type IntroCampaignDraft = {
   county: string;
   campaignType?: CampaignPropertyType;
   agentRole?: "buyer" | "seller";
+  campaignPath?: MlsCampaignPathSegment;
 };
 
 export function draftFromSearchResult(result: BuyLeadsSearchResult): IntroCampaignDraft {

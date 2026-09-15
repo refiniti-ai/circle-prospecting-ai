@@ -102,6 +102,12 @@
   border: 1px solid rgba(50, 213, 131, 0.4);
 }
 
+.buy-mockup-card__badge--coming_soon {
+  color: #9a3412;
+  background: rgba(251, 146, 60, 0.18);
+  border: 1px solid rgba(234, 88, 12, 0.4);
+}
+
 .buy-mockup-card__badge--just_sold {
   color: #1d4ed8;
   background: rgba(0, 122, 255, 0.1);

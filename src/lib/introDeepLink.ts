@@ -20,7 +20,7 @@ function isNumericMlsId(digitsOnly: string): boolean {
   return /^[0-9]{5,9}$/.test(digitsOnly);
 }
 
-/** $99 intro MLS URL — same listed/seller/buyer convention as regular, under /99promo. */
+/** $99 intro MLS URL — same listed/cs/seller/buyer convention as regular, under /99promo. */
 export function introPromoMlsPath(mls: string, campaign: MlsCampaignPathSegment = "listed"): string {
   const hasLetters = /[A-Za-z]/.test(mls);
   const q = hasLetters ? normalizeIntroMlsId(mls) : mls.trim().replace(/\D/g, "");

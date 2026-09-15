@@ -1,0 +1,44 @@
+{
+  "ImageRepository": {
+    "ImageIdentifier": "381767547693.dkr.ecr.us-east-2.amazonaws.com/circle-prospecting-api:latest",
+    "ImageRepositoryType": "ECR",
+    "ImageConfiguration": {
+      "Port": "8080",
+      "RuntimeEnvironmentVariables": {
+        "ADMIN_USERNAME": "admin",
+        "APP_PUBLIC_URL": "https://circleprospecting.ai",
+        "CORS_ORIGIN": "https://circleprospecting.ai,https://www.circleprospecting.ai,https://circle-prospecting-ai.web.app,https://d209dfj15nbkw2.cloudfront.net",
+        "FIREBASE_PROJECT_ID": "circle-prospecting-ai",
+        "GHL_LOCATION_ID": "YCc3oqsHSOrxQ5ojV68g",
+        "GHL_MAIL_WEBHOOK_URL": "https://services.leadconnectorhq.com/hooks/YCc3oqsHSOrxQ5ojV68g/webhook-trigger/cd9dd55b-c08f-4eb3-8a76-5f371b812e34",
+        "NODE_ENV": "production",
+        "PORT": "8080",
+        "PURCHASE_NOTIFICATION_EMAIL": "info@circleprospecting.ai",
+        "ROOFS_DB_HOST": "new-production.cg2uhqhfvzae.us-east-2.rds.amazonaws.com",
+        "ROOFS_DB_PORT": "3306",
+        "ROOFS_DB_NAME": "roofs",
+        "ROOFS_DB_USER": "circle",
+        "CIRCLE_APP_DB_NAME": "circle"
+      },
+      "RuntimeEnvironmentSecrets": {
+        "ADMIN_PASSWORD": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/ADMIN_PASSWORD-c4hn2Z",
+        "DASHBOARD_JWT_SECRET": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/DASHBOARD_JWT_SECRET-1OB4WF",
+        "FIREBASE_SERVICE_ACCOUNT_JSON": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/FIREBASE_SERVICE_ACCOUNT_JSON-KChXVy",
+        "GHL_BEARER_TOKEN": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/GHL_BEARER_TOKEN-YH9IXM",
+        "GHL_CHECKOUT_URL_FIELD_KEY": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/GHL_CHECKOUT_URL_FIELD_KEY-BYAa0G",
+        "GHL_PAY_LINK_CLICKED_AT_FIELD_KEY": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/GHL_PAY_LINK_CLICKED_AT_FIELD_KEY-lB1aoP",
+        "GHL_PAY_LINK_CLICK_COUNT_FIELD_KEY": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/GHL_PAY_LINK_CLICK_COUNT_FIELD_KEY-2cCtjo",
+        "GHL_PAY_LINK_FIELD_KEY": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/GHL_PAY_LINK_FIELD_KEY-HwdRae",
+        "GOOGLE_MAPS_API_KEY": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/GOOGLE_MAPS_API_KEY-2eijL6",
+        "META_CAPI_ACCESS_TOKEN": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/META_CAPI_ACCESS_TOKEN-OdKeYr",
+        "STRIPE_SECRET_KEY": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/STRIPE_SECRET_KEY-AQK5KH",
+        "STRIPE_WEBHOOK_SECRET": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/STRIPE_WEBHOOK_SECRET-wvHO1l",
+        "ROOFS_DB_PASSWORD": "arn:aws:secretsmanager:us-east-2:381767547693:secret:circle-prospecting/ROOFS_DB_PASSWORD-v3SJa4"
+      }
+    }
+  },
+  "AutoDeploymentsEnabled": true,
+  "AuthenticationConfiguration": {
+    "AccessRoleArn": "arn:aws:iam::381767547693:role/circle-prospecting-apprunner-ecr-role"
+  }
+}

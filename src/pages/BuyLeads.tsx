@@ -772,6 +772,7 @@ export function BuyLeads() {
           signal: ac.signal,
           contactId: ghlContactIdFromUrl,
           agentRole: agentFromPath,
+          campaignPath: campaignPathFromUrl,
           autoPickMultiple: isWelcomeMlsLink,
         });
         if (ac.signal.aborted) return;
@@ -991,7 +992,8 @@ export function BuyLeads() {
     document.getElementById("buy-checkout-step")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  const campaignDisplayLabel = campaignType === "just_listed" ? "Just listed" : "Just sold";
+  const campaignDisplayLabel =
+    campaignPathFromUrl === "cs" ? "Coming soon" : campaignType === "just_listed" ? "Just listed" : "Just sold";
 
   async function refreshLeadCount(opts?: { quiet?: boolean; radiusOverride?: string }) {
     const radiusForRequest = opts?.radiusOverride ?? radius;
@@ -1174,7 +1176,7 @@ export function BuyLeads() {
               <p className="page-lead">
                 {listing ? (
                   <>
-                    Your <strong>{campaignType === "just_listed" ? "just listed" : "just sold"}</strong> campaign is pre-filled from this
+                    Your <strong>{campaignDisplayLabel.toLowerCase()}</strong> campaign is pre-filled from this
                     property—pick a target ring, choose your service, then checkout securely.
                   </>
                 ) : isEntrySearch ? (
@@ -1252,6 +1254,7 @@ export function BuyLeads() {
                     listing={displayListing}
                     form={listingForm}
                     campaignType={campaignType}
+                    campaignPath={campaignPathFromUrl}
                     radiusId={listingRadiusId}
                     radiusLabel={selectedListingRing.label}
                     radiusCount={selectedListingRing.count}
@@ -1261,6 +1264,7 @@ export function BuyLeads() {
                     listing={displayListing}
                     form={listingForm}
                     campaignType={campaignType}
+                    campaignPath={campaignPathFromUrl}
                     radiusId={listingRadiusId}
                     selectedRing={selectedListingRing}
                     mapHasCoords={mapHasCoords}
@@ -1278,6 +1282,7 @@ export function BuyLeads() {
                       form={listingForm}
                       campaignLabel={campaignDisplayLabel}
                       campaignType={campaignType}
+                      campaignPath={campaignPathFromUrl}
                       radiusId={listingRadiusId}
                       radiusLabel={selectedListingRing.label}
                       homes={requestedLeads}
@@ -1809,6 +1814,11 @@ export function BuyLeads() {
                 background: rgba(0, 122, 255, 0.12);
                 color: #0369a1;
                 border: 1px solid rgba(0, 122, 255, 0.28);
+              }
+              .buy-campaign-badge--coming_soon {
+                background: rgba(251, 146, 60, 0.18);
+                color: #9a3412;
+                border: 1px solid rgba(234, 88, 12, 0.35);
               }
               .buy-campaign-badge--just_sold {
                 background: rgba(162, 215, 41, 0.18);

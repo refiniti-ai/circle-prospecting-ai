@@ -1,13 +1,14 @@
 import { apiBase } from "./apiBase";
 import { fetchOrderById } from "./apiClient";
 import { agentRoleFromGhlHit, pickGhlHitForAgentRole } from "./ghlContactRole";
-import { resolveCampaignPath } from "./mlsCampaignPath";
+import { resolveCampaignPath, type MlsCampaignPathSegment } from "./mlsCampaignPath";
 import { buildListingFromGhlPrefill } from "./listingDraft";
 import { buildMlsLeadsUrl } from "./mlsUrl";
 import type { ListingPayload } from "./listingData";
 import type { ListingAgentRole } from "./listingAgents";
 import { writeListingCache, buildListingCacheKey } from "./listingCache";
 import { trafficSourceHeaders } from "./trafficSource";
+import { fetchRoofsListingByMls, roofsStatusFromCampaignPath } from "./roofsListingApi";
 
 export type GhlContactSearchHit = {
   id: string;
@@ -39,6 +40,8 @@ export type ResolveListingByMlsOptions = {
   agentRole?: ListingAgentRole | null;
   /** From ?c= on welcome / tracked links — load this contact directly. */
   contactId?: string | null;
+  /** /cs vs /listed — prefer matching roofs.mls_properties.status when reading AWS. */
+  campaignPath?: MlsCampaignPathSegment | null;
   /** When true, pick a contact instead of throwing on multiple MLS hits. */
   autoPickMultiple?: boolean;
 };
@@ -194,6 +197,15 @@ export async function resolveListingByMls(
 ): Promise<ListingPayload> {
   const signal = opts?.signal;
   const mlsQ = mls.trim();
+
+  const roofs = await fetchRoofsListingByMls(mlsQ, {
+    signal,
+    status: roofsStatusFromCampaignPath(opts?.campaignPath),
+  });
+  if (roofs) {
+    cacheResolvedListing(mlsQ, roofs, opts);
+    return roofs;
+  }
 
   if (opts?.contactId?.trim()) {
     try {

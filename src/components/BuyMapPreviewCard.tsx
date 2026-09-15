@@ -1,6 +1,7 @@
 import { ListingMap } from "./ListingMap";
 import { radiusSummaryLine, resolveListingDisplayFields } from "../lib/buyListingDisplay";
 import type { ListingCampaignType, ListingFormValues, ListingPayload, RadiusId } from "../lib/listingData";
+import type { MlsCampaignPathSegment } from "../lib/mlsCampaignPath";
 
 type Ring = { label: string; count: number };
 
@@ -8,6 +9,7 @@ type Props = {
   listing: ListingPayload;
   form: ListingFormValues;
   campaignType: ListingCampaignType;
+  campaignPath?: MlsCampaignPathSegment | null;
   radiusId: RadiusId;
   selectedRing: Ring | undefined;
   mapHasCoords: boolean;
@@ -33,6 +35,7 @@ export function BuyMapPreviewCard({
   listing,
   form,
   campaignType,
+  campaignPath,
   radiusId,
   selectedRing,
   mapHasCoords,
@@ -44,7 +47,7 @@ export function BuyMapPreviewCard({
   locatingMap,
   mapNotice,
 }: Props) {
-  const d = resolveListingDisplayFields(form, listing, campaignType);
+  const d = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const campaignLine = d.mls ? `${d.campaignPrefix}: ${d.mls}` : d.campaignPrefix;
   const matchedCount = selectedRing?.count;
 

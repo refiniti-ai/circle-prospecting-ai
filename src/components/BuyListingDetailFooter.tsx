@@ -1,5 +1,6 @@
 import { radiusSummaryLine, resolveListingDisplayFields } from "../lib/buyListingDisplay";
 import type { ListingCampaignType, ListingFormValues, ListingPayload, RadiusId } from "../lib/listingData";
+import type { MlsCampaignPathSegment } from "../lib/mlsCampaignPath";
 
 function MegaphoneIcon() {
   return (
@@ -32,6 +33,7 @@ type Props = {
   form: ListingFormValues;
   listing: ListingPayload;
   campaignType: ListingCampaignType;
+  campaignPath?: MlsCampaignPathSegment | null;
   showCampaignLine?: boolean;
   showRadiusLine?: boolean;
   radiusId?: RadiusId;
@@ -45,6 +47,7 @@ export function BuyListingDetailFooter({
   form,
   listing,
   campaignType,
+  campaignPath,
   showCampaignLine = false,
   showRadiusLine = false,
   radiusId,
@@ -52,7 +55,7 @@ export function BuyListingDetailFooter({
   radiusCount,
   className = "",
 }: Props) {
-  const d = resolveListingDisplayFields(form, listing, campaignType);
+  const d = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const campaignLine = d.mls ? `${d.campaignPrefix}: ${d.mls}` : d.campaignPrefix;
 
   return (

@@ -1,0 +1,13 @@
+[
+  {
+    "IpProtocol": "tcp",
+    "FromPort": 3306,
+    "ToPort": 3306,
+    "UserIdGroupPairs": [
+      {
+        "GroupId": "sg-076992f8bc960e434",
+        "Description": "Circle Prospecting App Runner VPC connector"
+      }
+    ]
+  }
+]

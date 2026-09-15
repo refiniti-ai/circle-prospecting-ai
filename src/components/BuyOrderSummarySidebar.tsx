@@ -2,12 +2,14 @@ import { ListingPhoto } from "./ListingPhoto";
 import { resolveListingDisplayFields } from "../lib/buyListingDisplay";
 import { radiusRingLabel, type ListingFormValues, type ListingPayload, type RadiusId } from "../lib/listingData";
 import { checkoutPricePerLeadUsd, formatMoneyUsd, serviceLineLabel, type LeadServiceLine, type LeadTierId } from "../lib/leadPricing";
+import type { MlsCampaignPathSegment } from "../lib/mlsCampaignPath";
 
 type Props = {
   listing: ListingPayload;
   form: ListingFormValues;
   campaignLabel: string;
   campaignType: "just_listed" | "just_sold";
+  campaignPath?: MlsCampaignPathSegment | null;
   radiusId: RadiusId;
   radiusLabel: string;
   homes: number;
@@ -33,6 +35,7 @@ export function BuyOrderSummarySidebar({
   form,
   campaignLabel,
   campaignType,
+  campaignPath,
   radiusId,
   radiusLabel,
   homes,
@@ -47,9 +50,16 @@ export function BuyOrderSummarySidebar({
   compact = false,
   photoPending = false,
 }: Props) {
-  const d = resolveListingDisplayFields(form, listing, campaignType);
+  const d = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const perHome = checkoutPricePerLeadUsd(serviceLine, tierId, promoCode);
-  const displayCampaign = campaignLabel === "Just listed" ? "Just Listed" : campaignLabel === "Just sold" ? "Just Sold" : campaignLabel;
+  const displayCampaign =
+    campaignLabel === "Just listed"
+      ? "Just Listed"
+      : campaignLabel === "Just sold"
+        ? "Just Sold"
+        : campaignLabel === "Coming soon"
+          ? "Coming Soon"
+          : campaignLabel;
 
   return (
     <aside className={`buy-mockup-card buy-order-summary section-surface buy-card${compact ? " buy-order-summary--compact" : ""}`}>

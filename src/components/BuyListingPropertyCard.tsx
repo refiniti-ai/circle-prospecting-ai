@@ -2,11 +2,13 @@ import { ListingPhoto } from "./ListingPhoto";
 import { BuyListingDetailFooter } from "./BuyListingDetailFooter";
 import { resolveListingDisplayFields } from "../lib/buyListingDisplay";
 import type { ListingCampaignType, ListingFormValues, ListingPayload, RadiusId } from "../lib/listingData";
+import type { MlsCampaignPathSegment } from "../lib/mlsCampaignPath";
 
 type Props = {
   listing: ListingPayload;
   form: ListingFormValues;
   campaignType: ListingCampaignType;
+  campaignPath?: MlsCampaignPathSegment | null;
   radiusId: RadiusId;
   radiusLabel: string;
   radiusCount: number;
@@ -17,19 +19,20 @@ export function BuyListingPropertyCard({
   listing,
   form,
   campaignType,
+  campaignPath,
   radiusId,
   radiusLabel,
   radiusCount,
   photoPending = false,
 }: Props) {
-  const d = resolveListingDisplayFields(form, listing, campaignType);
+  const d = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const photoAlt = d.street || d.cityLine ? `Listing photo for ${d.street || d.cityLine}` : "Default property photo";
 
   return (
     <article className="buy-mockup-card buy-property-card section-surface buy-card">
       <div className="buy-mockup-card__head">
         <h2 className="buy-mockup-card__title">Selected property</h2>
-        <span className={`buy-mockup-card__badge buy-mockup-card__badge--${campaignType}`}>{d.campaignBadge}</span>
+        <span className={`buy-mockup-card__badge buy-mockup-card__badge--${d.campaignDisplayKind}`}>{d.campaignBadge}</span>
       </div>
       <div className="buy-property-card__media">
         <ListingPhoto
@@ -44,6 +47,7 @@ export function BuyListingPropertyCard({
         form={form}
         listing={listing}
         campaignType={campaignType}
+        campaignPath={campaignPath}
         showRadiusLine
         radiusId={radiusId}
         radiusLabel={radiusLabel}

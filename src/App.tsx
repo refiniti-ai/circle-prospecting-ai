@@ -27,7 +27,7 @@ import { NotFound } from "./pages/NotFound";
 import { FirstPromoterTracker } from "./components/FirstPromoterTracker";
 import { MetaPixelTracker } from "./components/MetaPixelTracker";
 
-/** Remount on /buy-leads ↔ /mls/:id ↔ /{listed|seller|buyer}/mls/:id so listing state does not carry over. */
+/** Remount on /buy-leads ↔ /mls/:id ↔ /{listed|cs|seller|buyer}/mls/:id so listing state does not carry over. */
 function BuyLeadsScreen() {
   const { pathname } = useLocation();
   return <BuyLeads key={pathname} />;
@@ -52,7 +52,7 @@ function LegacySoldMlsRedirect() {
  * Old pay links included an address slug (/listed/mls/TB8517024/18909-jebert-dr).
  * Strip the slug — MLS-only URL is canonical; listing still loads from GHL.
  */
-function MlsAddressSlugRedirect({ segment }: { segment: "listed" | "seller" | "buyer" | "mls" | "sold" }) {
+function MlsAddressSlugRedirect({ segment }: { segment: "listed" | "cs" | "seller" | "buyer" | "mls" | "sold" }) {
   const { mls } = useParams();
   const { search } = useLocation();
   if (!mls) return <Navigate to="/buy-leads" replace />;
@@ -65,7 +65,7 @@ function MlsAddressSlugRedirect({ segment }: { segment: "listed" | "seller" | "b
   return <Navigate to={target} replace />;
 }
 
-function IntroPromoMlsSlugRedirect({ campaign }: { campaign: "listed" | "seller" | "buyer" }) {
+function IntroPromoMlsSlugRedirect({ campaign }: { campaign: "listed" | "cs" | "seller" | "buyer" }) {
   const { mls } = useParams();
   const { search } = useLocation();
   if (!mls) return <Navigate to={`/99promo${search}`} replace />;
@@ -109,6 +109,8 @@ export default function App() {
       <Route path="/buy-leads" element={<BuyLeadsScreen />} />
       <Route path="/listed/mls/:mls/:addressSlug" element={<MlsAddressSlugRedirect segment="listed" />} />
       <Route path="/listed/mls/:mls" element={<BuyLeadsScreen />} />
+      <Route path="/cs/mls/:mls/:addressSlug" element={<MlsAddressSlugRedirect segment="cs" />} />
+      <Route path="/cs/mls/:mls" element={<BuyLeadsScreen />} />
       <Route path="/seller/mls/:mls/:addressSlug" element={<MlsAddressSlugRedirect segment="seller" />} />
       <Route path="/seller/mls/:mls" element={<BuyLeadsScreen />} />
       <Route path="/buyer/mls/:mls/:addressSlug" element={<MlsAddressSlugRedirect segment="buyer" />} />
@@ -133,6 +135,8 @@ export default function App() {
       <Route path="/99promo/search/agent/:agentPhone" element={<IntroCampaignLanding />} />
       <Route path="/99promo/listed/mls/:mls/:addressSlug" element={<IntroPromoMlsSlugRedirect campaign="listed" />} />
       <Route path="/99promo/listed/mls/:mls" element={<IntroCampaignMlsPage campaign="listed" />} />
+      <Route path="/99promo/cs/mls/:mls/:addressSlug" element={<IntroPromoMlsSlugRedirect campaign="cs" />} />
+      <Route path="/99promo/cs/mls/:mls" element={<IntroCampaignMlsPage campaign="cs" />} />
       <Route path="/99promo/seller/mls/:mls/:addressSlug" element={<IntroPromoMlsSlugRedirect campaign="seller" />} />
       <Route path="/99promo/seller/mls/:mls" element={<IntroCampaignMlsPage campaign="seller" />} />
       <Route path="/99promo/buyer/mls/:mls/:addressSlug" element={<IntroPromoMlsSlugRedirect campaign="buyer" />} />

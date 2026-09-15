@@ -26,7 +26,7 @@ import {
 } from "../lib/listingData";
 import { resolveRealMls } from "../lib/listingDraft";
 import { introPromoMlsPath } from "../lib/introDeepLink";
-import { resolveCampaignPath } from "../lib/mlsCampaignPath";
+import { parseCampaignPathFromUrl, resolveCampaignPath } from "../lib/mlsCampaignPath";
 import { reportCheckoutCanceled } from "../lib/leadsApi";
 import { notifyError } from "../lib/notify";
 import "./intro-campaign.css";
@@ -79,7 +79,15 @@ export function IntroCampaignCheckout({
 
   const { listing, form } = draft;
   const campaignType = draft.campaignType ?? "just_listed";
-  const campaignDisplay = resolveListingDisplayFields(form, listing, campaignType);
+  const campaignPath =
+    draft.campaignPath ??
+    parseCampaignPathFromUrl(seoPath ?? "") ??
+    resolveCampaignPath({
+      agentRole: draft.agentRole,
+      listingType: listing.listingType,
+      pathSegment: draft.campaignType === "just_sold" ? "seller" : "listed",
+    });
+  const campaignDisplay = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const radiusId = DEFAULT_LISTING_RADIUS_ID;
   const selectedRing = listing.radii[radiusId] ?? {
     label: "1/4 Mile",
@@ -115,13 +123,7 @@ export function IntroCampaignCheckout({
         agentName: form.agentName.trim() || listing.agentName,
         brokerage: form.brokerage.trim() || listing.brokerage,
         radiusLabel: "Intro 250 pack",
-        pagePath: introPromoMlsPath(
-          mls,
-          resolveCampaignPath({
-            agentRole: draft.agentRole,
-            pathSegment: draft.campaignType === "just_sold" ? "seller" : "listed",
-          })
-        ),
+        pagePath: introPromoMlsPath(mls, campaignPath),
       });
       if (sessionId) sessionStorage.setItem("cpai_checkout_session", sessionId);
       trackFirstPromoterReferral(email.trim());
@@ -160,6 +162,7 @@ export function IntroCampaignCheckout({
                 listing={listing}
                 form={form}
                 campaignType={campaignType}
+                campaignPath={campaignPath}
                 radiusId={radiusId}
                 radiusLabel={radiusLabel}
                 radiusCount={INTRO_CAMPAIGN.homes}
@@ -168,6 +171,7 @@ export function IntroCampaignCheckout({
                 listing={listing}
                 form={form}
                 campaignType={campaignType}
+                campaignPath={campaignPath}
                 radiusId={radiusId}
                 selectedRing={{ label: selectedRing.label, count: INTRO_CAMPAIGN.homes }}
                 mapHasCoords={mapHasCoords}
@@ -183,8 +187,9 @@ export function IntroCampaignCheckout({
                 <IntroCampaignOrderSummary
                   listing={listing}
                   form={form}
-                  campaignLabel={campaignDisplay.campaignLabel}
+                  campaignLabel={campaignDisplay.campaignPrefix}
                   campaignType={campaignType}
+                  campaignPath={campaignPath}
                   radiusId={radiusId}
                   radiusLabel={selectedRing.label}
                   onContinue={scrollToCheckout}

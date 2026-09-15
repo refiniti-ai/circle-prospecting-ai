@@ -2,6 +2,8 @@ import { IntroCampaignPropertyCard } from "./IntroCampaignPropertyCard";
 import { INTRO_CAMPAIGN } from "../../lib/introCampaign";
 import type { IntroListingKind, IntroListingOption } from "../../lib/introAgentListings";
 import type { GhlContactSearchHit } from "../../lib/buyLeadsSearchApi";
+import { isComingSoonListingType } from "../../lib/listingCampaignType";
+import { campaignPathFromListingType } from "../../lib/mlsCampaignPath";
 import {
   DEFAULT_LISTING_RADIUS_ID,
   radiusRingLabel,
@@ -31,8 +33,9 @@ function formatAgentMeta(agent: GhlContactSearchHit): string {
     .join(" · ");
 }
 
-function badgeForKind(kind: IntroListingKind): string | undefined {
+function badgeForKind(kind: IntroListingKind, listingType?: string | null): string | undefined {
   if (kind === "buyer") return "BUYER SIDE CLOSE";
+  if (kind === "listed" && isComingSoonListingType(listingType)) return "COMING SOON";
   return undefined;
 }
 
@@ -64,6 +67,7 @@ function ListingPickCard({
           listing={listing}
           form={form}
           campaignType={option.campaignType}
+          campaignPath={campaignPathFromListingType(option.listingType)}
           radiusId={DEFAULT_LISTING_RADIUS_ID}
           radiusLabel={radiusLabel}
           radiusCount={radiusCount}
@@ -71,7 +75,7 @@ function ListingPickCard({
           agentEmail={form.email || agent.email}
           agentPhone={form.phone || agent.phone}
           kicker=""
-          badgeLabel={badgeForKind(option.kind)}
+          badgeLabel={badgeForKind(option.kind, option.listingType)}
         />
       </button>
     </li>

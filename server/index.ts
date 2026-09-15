@@ -59,6 +59,8 @@ import {
   handleIntroListingSnapshotGet,
   handleIntroListingSnapshotPut,
 } from "./introListingSnapshotApi.js";
+import { handleRoofsListingByMls } from "./roofsListingApi.js";
+import { isRoofsDbConfigured } from "./roofsMlsStore.js";
 import {
   fetchGhlContact,
   fetchGhlContactPrefill,
@@ -395,6 +397,7 @@ app.get("/api/health", generalLimit, (_req: Request, res: Response) => {
     status: "ok",
     time: new Date().toISOString(),
     firestore,
+    roofsDb: isRoofsDbConfigured(),
     mailTransport: mail.mode,
     mailConfigured: mail.configured,
     ...(!mail.configured ? { mailSetupHint: mail.setupHint } : {}),
@@ -2341,6 +2344,9 @@ app.get("/api/intro/listing-snapshot", generalLimit, (req, res) => {
 });
 app.post("/api/intro/listing-snapshot", generalLimit, (req, res) => {
   void handleIntroListingSnapshotPut(req, res);
+});
+app.get("/api/listings/mls", generalLimit, (req, res) => {
+  void handleRoofsListingByMls(req, res);
 });
 
 /** Avoid Express’s default HTML “Cannot POST /api/…” — the SPA treats non-JSON as a Hosting/rewrite failure. */

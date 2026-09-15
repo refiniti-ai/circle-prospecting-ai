@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { dualWriteOrder } from "./circleAppDb.js";
 import { getFirestoreDb } from "./firebaseAdmin.js";
 
 export type RadiusId = "subdivision" | "q1" | "h1" | "m1" | "zip";
@@ -88,14 +89,14 @@ function cloneForId(id: string): ListingPayload {
 }
 
 export function upsertOrder(order: ListingPayload): ListingPayload {
+  const doc: FirestoreOrderDoc = {
+    ...order,
+    id: String(order.id || order.internalId),
+    internalId: Number(order.internalId),
+    updatedAt: new Date().toISOString(),
+  };
   const firestore = getFirestoreDb();
   if (firestore) {
-    const doc: FirestoreOrderDoc = {
-      ...order,
-      id: String(order.id || order.internalId),
-      internalId: Number(order.internalId),
-      updatedAt: new Date().toISOString(),
-    };
     // Firestore is optional: never let credential/network errors crash the API process.
     void firestore
       .collection(ORDER_COLLECTION)
@@ -105,6 +106,7 @@ export function upsertOrder(order: ListingPayload): ListingPayload {
         console.error("[orderStore] Firestore write failed; continuing with local fallback", err);
       });
   }
+  dualWriteOrder(doc);
   const db = readDb();
   const idx = db.orders.findIndex((o) => o.id === order.id || o.internalId === order.internalId || o.mls === order.mls);
   if (idx >= 0) db.orders[idx] = { ...db.orders[idx], ...order };

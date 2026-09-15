@@ -1,11 +1,13 @@
 import { ListingPhoto } from "../ListingPhoto";
 import { resolveListingDisplayFields } from "../../lib/buyListingDisplay";
 import type { ListingCampaignType, ListingFormValues, ListingPayload, RadiusId } from "../../lib/listingData";
+import type { MlsCampaignPathSegment } from "../../lib/mlsCampaignPath";
 
 type Props = {
   listing: ListingPayload;
   form: ListingFormValues;
   campaignType: ListingCampaignType;
+  campaignPath?: MlsCampaignPathSegment | null;
   radiusId: RadiusId;
   radiusLabel: string;
   radiusCount: number;
@@ -22,6 +24,7 @@ export function IntroCampaignPropertyCard({
   listing,
   form,
   campaignType,
+  campaignPath,
   radiusLabel,
   radiusCount,
   agentName,
@@ -30,7 +33,7 @@ export function IntroCampaignPropertyCard({
   kicker = "Selected property",
   badgeLabel,
 }: Props) {
-  const d = resolveListingDisplayFields(form, listing, campaignType);
+  const d = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const photoAlt = d.street || d.cityLine ? `Listing photo for ${d.street || d.cityLine}` : "Property photo";
   const agentLine = [agentName, agentEmail, agentPhone].filter(Boolean).join(" · ");
   const badge = badgeLabel ?? d.campaignBadge;
@@ -48,7 +51,7 @@ export function IntroCampaignPropertyCard({
       <div className="intro-property-card__body">
         <div className="intro-property-card__head">
           {kicker.trim() ? <p className="intro-property-card__kicker">{kicker}</p> : <span />}
-          <span className={`intro-property-card__badge intro-property-card__badge--${campaignType}`}>
+          <span className={`intro-property-card__badge intro-property-card__badge--${d.campaignDisplayKind}`}>
             {badge}
           </span>
         </div>

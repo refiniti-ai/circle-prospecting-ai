@@ -1,5 +1,5 @@
 import { apiBase } from "./apiBase";
-import { campaignTypeFromListingType } from "./listingCampaignType";
+import { campaignTypeFromListingType, isComingSoonListingType } from "./listingCampaignType";
 import type { ListingCampaignType } from "./listingData";
 
 export const INTRO_MAX_AGENT_SEARCH_HITS = 3;
@@ -57,15 +57,22 @@ function isSoldOpportunity(opp: IntroGhlOpportunitySummary): boolean {
 function classifyIntroListing(opp: IntroGhlOpportunitySummary): IntroListingKind | null {
   if (isBuyerSideOpportunity(opp)) return "buyer";
   if (isSoldOpportunity(opp)) return "sold";
+  if (isComingSoonListingType(opp.listingType)) return "listed";
 
   const fromField = campaignTypeFromListingType(opp.listingType);
   if (fromField === "just_listed") return "listed";
 
   const url = opportunityUrls(opp);
-  if (/\/listed\/mls\//.test(url)) return "listed";
+  if (/\/listed\/mls\//.test(url) || /\/cs\/mls\//.test(url)) return "listed";
 
   const name = (opp.name || "").toLowerCase();
-  if (name.includes("just listed") || /\blisted\b/.test(name)) return "listed";
+  if (
+    name.includes("just listed") ||
+    name.includes("coming soon") ||
+    /\blisted\b/.test(name)
+  ) {
+    return "listed";
+  }
 
   return null;
 }

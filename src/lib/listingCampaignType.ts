@@ -3,11 +3,20 @@ import type { ListingAgentRole } from "./listingAgents";
 import { campaignForAgentRole } from "./listingAgents";
 import type { MlsCampaignPathSegment } from "./mlsCampaignPath";
 
-/** GHL custom field "Listing Type" (e.g. "Just Listed", "Just Sold"). */
+/** GHL Listing Type / MLS status "Coming Soon". */
+export function isComingSoonListingType(raw: string | null | undefined): boolean {
+  if (!raw?.trim()) return false;
+  const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return v.includes("coming_soon") || v === "cs" || v === "comingsoon";
+}
+
+/** GHL custom field "Listing Type" (e.g. "Just Listed", "Just Sold", "Coming Soon"). */
 export function campaignTypeFromListingType(raw: string | null | undefined): ListingCampaignType | undefined {
   if (!raw?.trim()) return undefined;
   const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (v.includes("just_listed") || v === "listed" || v === "new_listing") return "just_listed";
+  if (isComingSoonListingType(raw) || v.includes("just_listed") || v === "listed" || v === "new_listing") {
+    return "just_listed";
+  }
   if (v.includes("just_sold") || v === "sold") return "just_sold";
   return undefined;
 }

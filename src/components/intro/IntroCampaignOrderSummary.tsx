@@ -3,12 +3,14 @@ import { resolveListingDisplayFields } from "../../lib/buyListingDisplay";
 import { formatMoneyUsd, serviceLineLabel } from "../../lib/leadPricing";
 import { radiusRingLabel, type ListingFormValues, type ListingPayload, type RadiusId } from "../../lib/listingData";
 import { INTRO_CAMPAIGN } from "../../lib/introCampaign";
+import type { MlsCampaignPathSegment } from "../../lib/mlsCampaignPath";
 
 type Props = {
   listing: ListingPayload;
   form: ListingFormValues;
   campaignLabel: string;
   campaignType: "just_listed" | "just_sold";
+  campaignPath?: MlsCampaignPathSegment | null;
   radiusId: RadiusId;
   radiusLabel: string;
   onContinue?: () => void;
@@ -25,14 +27,21 @@ export function IntroCampaignOrderSummary({
   form,
   campaignLabel,
   campaignType,
+  campaignPath,
   radiusId,
   radiusLabel,
   onContinue,
   busy,
 }: Props) {
-  const d = resolveListingDisplayFields(form, listing, campaignType);
+  const d = resolveListingDisplayFields(form, listing, campaignType, campaignPath);
   const displayCampaign =
-    campaignLabel === "Just listed" ? "Just Listed" : campaignLabel === "Just sold" ? "Just Sold" : campaignLabel;
+    campaignLabel === "Just listed"
+      ? "Just Listed"
+      : campaignLabel === "Just sold"
+        ? "Just Sold"
+        : campaignLabel === "Coming soon"
+          ? "Coming Soon"
+          : campaignLabel;
 
   return (
     <aside className="buy-mockup-card buy-order-summary section-surface buy-card">

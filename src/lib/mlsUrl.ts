@@ -8,7 +8,7 @@ import {
 
 /**
  * Canonical Buy Leads paths:
- * - /listed/mls/TB8500940 | /seller/mls/TB8500940 | /buyer/mls/TB8500940
+ * - /listed/mls/TB8500940 | /cs/mls/TB8500940 | /seller/mls/TB8500940 | /buyer/mls/TB8500940
  * - Legacy: /mls/TB8500940 (?campaign= still supported)
  */
 export function buildMlsLeadsPath(
@@ -63,8 +63,10 @@ export function decodeMlsPathParam(raw: string | undefined): string {
   }
 }
 
-/** First path segment when route is /{segment}/mls/:mls */
+/** Path segment when route is /{segment}/mls/:mls or /99promo/{segment}/mls/:mls */
 export function campaignPathFromLocationPathname(pathname: string): MlsCampaignPathSegment | null {
-  const seg = pathname.split("/").filter(Boolean)[0];
-  return parseMlsCampaignPathSegment(seg);
+  const parts = pathname.split("/").filter(Boolean);
+  const mlsIdx = parts.findIndex((p, i) => p.toLowerCase() === "mls" && i > 0);
+  if (mlsIdx > 0) return parseMlsCampaignPathSegment(parts[mlsIdx - 1]);
+  return parseMlsCampaignPathSegment(parts[0]);
 }

@@ -30,11 +30,12 @@ function applyIntroCampaignPath(
     ...draft,
     campaignType,
     agentRole,
+    campaignPath: campaign,
     listing: { ...draft.listing, campaignType },
   };
 }
 
-/** $99 intro MLS checkout — `/99promo/{listed|seller|buyer}/mls/:mls` */
+/** $99 intro MLS checkout — `/99promo/{listed|cs|seller|buyer}/mls/:mls` */
 export function IntroCampaignMlsPage({ campaign }: { campaign: MlsCampaignPathSegment }) {
   const { mls: mlsParam } = useParams();
   const [searchParams] = useSearchParams();
@@ -59,6 +60,7 @@ export function IntroCampaignMlsPage({ campaign }: { campaign: MlsCampaignPathSe
         const listing = await resolveIntroListingByMls(mls, {
           signal: ac.signal,
           contactId: contactId || null,
+          campaignPath: campaign,
         });
         if (ac.signal.aborted) return;
         const draft = applyIntroCampaignPath(

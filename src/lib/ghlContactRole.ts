@@ -1,5 +1,5 @@
 import type { GhlContactSearchHit } from "./buyLeadsSearchApi";
-import { campaignTypeFromListingType } from "./listingCampaignType";
+import { campaignTypeFromListingType, isComingSoonListingType } from "./listingCampaignType";
 import {
   campaignPathFromListingType,
   type MlsCampaignPathSegment,
@@ -13,6 +13,7 @@ export function agentRoleFromGhlHit(
 ): ListingAgentRole | null {
   const fromAgentType = parseAgentRoleInput(hit.agentType);
   if (fromAgentType) return fromAgentType;
+  if (isComingSoonListingType(hit.listingType)) return "seller";
   const campaign = campaignTypeFromListingType(hit.listingType);
   if (campaign === "just_sold") return "seller";
   if (campaign === "just_listed") return "buyer";

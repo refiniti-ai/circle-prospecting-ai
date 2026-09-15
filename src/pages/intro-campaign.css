@@ -1092,6 +1092,11 @@
   color: #3d6b12;
 }
 
+.intro-listing-pick__badge--coming_soon {
+  background: rgba(251, 146, 60, 0.2);
+  color: #9a3412;
+}
+
 .intro-listing-pick__badge--listed {
   background: rgba(141, 198, 63, 0.2);
   color: #3d6b12;
@@ -1238,6 +1243,11 @@
 .intro-property-card__badge--just_listed {
   background: rgba(141, 198, 63, 0.22);
   color: #3d6b12;
+}
+
+.intro-property-card__badge--coming_soon {
+  background: rgba(251, 146, 60, 0.22);
+  color: #9a3412;
 }
 
 .intro-property-card__badge--just_sold {

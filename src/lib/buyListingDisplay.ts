@@ -1,6 +1,7 @@
 import { formatCityStateZip } from "./placesAddress";
 import type { ListingCampaignType, ListingFormValues, ListingPayload, RadiusId } from "./listingData";
 import { radiusRingLabel } from "./listingData";
+import type { MlsCampaignPathSegment } from "./mlsCampaignPath";
 
 export type ListingDisplayFields = {
   street: string;
@@ -10,6 +11,7 @@ export type ListingDisplayFields = {
   campaignLabel: string;
   campaignBadge: string;
   campaignPrefix: string;
+  campaignDisplayKind: "just_listed" | "just_sold" | "coming_soon";
   mlsMeta: string;
 };
 
@@ -29,14 +31,17 @@ export function listingCityLine(
 export function resolveListingDisplayFields(
   form: ListingFormValues,
   listing: ListingPayload,
-  campaignType: ListingCampaignType
+  campaignType: ListingCampaignType,
+  campaignPath?: MlsCampaignPathSegment | null
 ): ListingDisplayFields {
   const street = form.streetAddress.trim() || listing.address.trim();
   const cityLine = listingCityLine(form, listing);
   const mls = form.mls.trim() || listing.mls.trim();
-  const campaignLabel = campaignType === "just_listed" ? "Just Listed" : "Just Sold";
-  const campaignBadge = campaignType === "just_listed" ? "JUST LISTED" : "JUST SOLD";
-  const campaignPrefix = campaignType === "just_listed" ? "Just listed" : "Just sold";
+  const comingSoon = campaignPath === "cs";
+  const campaignDisplayKind = comingSoon ? "coming_soon" : campaignType;
+  const campaignLabel = comingSoon ? "Coming Soon" : campaignType === "just_listed" ? "Just Listed" : "Just Sold";
+  const campaignBadge = comingSoon ? "COMING SOON" : campaignType === "just_listed" ? "JUST LISTED" : "JUST SOLD";
+  const campaignPrefix = comingSoon ? "Coming soon" : campaignType === "just_listed" ? "Just listed" : "Just sold";
   const mlsMeta = `MLS # ${mls || "—"} | Single Family`;
 
   return {
@@ -47,6 +52,7 @@ export function resolveListingDisplayFields(
     campaignLabel,
     campaignBadge,
     campaignPrefix,
+    campaignDisplayKind,
     mlsMeta,
   };
 }

@@ -41,7 +41,7 @@ export function readTrafficSource(): TrafficSource | "" {
 }
 
 function isListingOrAgentPath(pathname: string): boolean {
-  return /\/(listed|seller|buyer)\/mls\//i.test(pathname) || /\/search\/agent\//i.test(pathname);
+  return /\/(listed|cs|seller|buyer)\/mls\//i.test(pathname) || /\/search\/agent\//i.test(pathname);
 }
 
 /** Current page, or last listing/agent URL in this tab (checkout may drop the MLS path). */

@@ -17,7 +17,7 @@ Your application is made of four parts. They move separately.
 | **Website** | Everything a visitor sees | **Your AWS account** (S3 + CloudFront, Ohio) | ✅ **Done** |
 | **Server** | Handles search, checkout, email | Google Cloud | To move |
 | **Listing data** | Properties, MLS numbers, photos | **Your AWS database** (`new-production`) | To connect |
-| **Business data** | Orders, customers, campaigns | Google database (Firestore) | To move |
+| **Business data** | Orders, customers, campaigns | Google database (Firestore) | Stage 1 started — tables go in MySQL `circle` (not `roofs`) |
 
 A working copy of the website is already live in your account:
 
@@ -158,8 +158,8 @@ scope, and **14–20 weeks** for the complete move.
 | # | What | Why | Status |
 | --- | --- | --- | --- |
 | 1 | AWS permissions (see separate document) | To build anything in your account | ✅ Granted |
-| 2 | **Read-only database user** on `new-production` | To read your listings | ⏳ **Waiting** |
-| 3 | **Database/schema name and listing table name**, plus one sample MLS number | To map your data to the site | ⏳ **Waiting** |
+| 2 | **Read-only database user** on `new-production` | To read your listings | ✅ User `circle` (listings in `roofs`) |
+| 3 | **Database/schema name and listing table name**, plus one sample MLS number | To map your data to the site | ✅ `roofs.mls_properties` (TB8546545) |
 | 4 | Decision on scope (see section 5 totals) | Determines cost and timeline | ⏳ **Waiting** |
 | 5 | Agreement on the switchover date | The one step with customer impact | Later |
 

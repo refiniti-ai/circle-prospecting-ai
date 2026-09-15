@@ -8,6 +8,8 @@ import {
 } from "./buyLeadsSearchApi";
 import { readIntroCampaignDraft } from "./introCampaign";
 import { fetchIntroListingSnapshot, persistIntroListingSnapshot } from "./introListingSnapshotApi";
+import { fetchRoofsListingByMls, roofsStatusFromCampaignPath } from "./roofsListingApi";
+import type { MlsCampaignPathSegment } from "./mlsCampaignPath";
 import { buildListingCacheKey, readListingCache, writeListingCache } from "./listingCache";
 import { normalizeIntroMlsId } from "./introDeepLink";
 
@@ -152,11 +154,20 @@ async function listingFromSavedSnapshot(mlsQ: string, signal?: AbortSignal): Pro
 
 export async function resolveIntroListingByMls(
   mls: string,
-  opts?: { signal?: AbortSignal; contactId?: string | null }
+  opts?: { signal?: AbortSignal; contactId?: string | null; campaignPath?: MlsCampaignPathSegment | null }
 ): Promise<ListingPayload> {
   const mlsQ = normalizeIntroMlsLookup(mls);
   const signal = opts?.signal;
   const contactId = opts?.contactId?.trim() || "";
+
+  const roofs = await fetchRoofsListingByMls(mlsQ, {
+    signal,
+    status: roofsStatusFromCampaignPath(opts?.campaignPath),
+  });
+  if (roofs) {
+    saveIntroListingSnapshot(mlsQ, roofs, true);
+    return roofs;
+  }
 
   const saved = await listingFromSavedSnapshot(mlsQ, signal);
   if (saved) return saved;

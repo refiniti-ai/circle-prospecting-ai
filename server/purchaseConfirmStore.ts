@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { dualWritePurchase } from "./circleAppDb.js";
 import { getFirestoreDb } from "./firebaseAdmin.js";
 
 export type LeadWorkStatus = "pending" | "completed";
@@ -147,6 +148,7 @@ export async function markPurchaseNotification(
       console.error("[purchaseConfirmStore] Firestore write failed; local JSON saved", err);
     }
   }
+  dualWritePurchase(sessionId, purchaseDocData(sessionId, { ...merged, sessionId }));
 }
 
 function rowsFromFile(): (PurchaseNotificationRecord & { sessionId: string })[] {
